@@ -1,19 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase, DEFAULT_GROUPS } = require('../database');
+const { getDatabase, findById, findAll, insert, update, remove, removeWhere, DEFAULT_GROUPS } = require('../database');
 
 // Get all projects
 router.get('/', (req, res) => {
   try {
     const db = getDatabase();
-    const projects = db.prepare(`
-      SELECT p.*,
-        (SELECT COUNT(*) FROM episodes WHERE project_id = p.id) as episode_count,
-        (SELECT COUNT(*) FROM sets WHERE project_id = p.id) as set_count
-      FROM projects p
-      ORDER BY p.created_at DESC
-    `).all();
+    const projects = db.projects.map(p => ({
+      ...p,
+      episode_count: db.episodes.filter(e => e.project_id === p.id).length,
+      set_count: db.sets.filter(s => s.project_id === p.id).length
+    }));
+    projects.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     res.json(projects);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -24,37 +23,33 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const db = getDatabase();
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const project = findById('projects', req.params.id);
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     // Get episodes
-    const episodes = db.prepare(`
-      SELECT * FROM episodes WHERE project_id = ? ORDER BY sort_order, name
-    `).all(req.params.id);
+    const episodes = findAll('episodes', { project_id: req.params.id })
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-    // Get total budget and actual
-    const totals = db.prepare(`
-      SELECT
-        COALESCE(SUM(budget_loc_fees + budget_security + budget_fire + budget_rentals + budget_permits + budget_police), 0) as total_budget
-      FROM sets WHERE project_id = ?
-    `).get(req.params.id);
+    // Calculate totals
+    const sets = findAll('sets', { project_id: req.params.id });
+    const total_budget = sets.reduce((sum, s) =>
+      sum + (s.budget_loc_fees || 0) + (s.budget_security || 0) + (s.budget_fire || 0) +
+      (s.budget_rentals || 0) + (s.budget_permits || 0) + (s.budget_police || 0), 0);
 
-    const actualTotals = db.prepare(`
-      SELECT COALESCE(SUM(ce.amount), 0) as total_actual
-      FROM cost_entries ce
-      JOIN sets s ON ce.set_id = s.id
-      WHERE s.project_id = ?
-    `).get(req.params.id);
+    const setIds = sets.map(s => s.id);
+    const total_actual = db.cost_entries
+      .filter(ce => setIds.includes(ce.set_id))
+      .reduce((sum, ce) => sum + (ce.amount || 0), 0);
 
     res.json({
       ...project,
       episodes,
-      total_budget: totals.total_budget,
-      total_actual: actualTotals.total_actual,
-      variance: totals.total_budget - actualTotals.total_actual
+      total_budget,
+      total_actual,
+      variance: total_budget - total_actual
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -64,26 +59,29 @@ router.get('/:id', (req, res) => {
 // Create project
 router.post('/', (req, res) => {
   try {
-    const db = getDatabase();
     const id = uuidv4();
     const { name, production_company, start_date, end_date, notes } = req.body;
 
-    db.prepare(`
-      INSERT INTO projects (id, name, production_company, start_date, end_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, name, production_company, start_date, end_date, notes);
-
-    // Create default groups (Backlot, Amort)
-    const insertEpisode = db.prepare(`
-      INSERT INTO episodes (id, project_id, name, type, sort_order)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    DEFAULT_GROUPS.forEach((group, index) => {
-      insertEpisode.run(uuidv4(), id, group.name, group.type, index);
+    const project = insert('projects', {
+      id,
+      name,
+      production_company,
+      start_date,
+      end_date,
+      notes
     });
 
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+    // Create default groups (Backlot, Amort)
+    DEFAULT_GROUPS.forEach((group, index) => {
+      insert('episodes', {
+        id: uuidv4(),
+        project_id: id,
+        name: group.name,
+        type: group.type,
+        sort_order: index
+      });
+    });
+
     res.status(201).json(project);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -93,17 +91,14 @@ router.post('/', (req, res) => {
 // Update project
 router.put('/:id', (req, res) => {
   try {
-    const db = getDatabase();
     const { name, production_company, start_date, end_date, notes } = req.body;
-
-    db.prepare(`
-      UPDATE projects
-      SET name = ?, production_company = ?, start_date = ?, end_date = ?,
-          notes = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(name, production_company, start_date, end_date, notes, req.params.id);
-
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const project = update('projects', req.params.id, {
+      name,
+      production_company,
+      start_date,
+      end_date,
+      notes
+    });
     res.json(project);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -113,8 +108,12 @@ router.put('/:id', (req, res) => {
 // Delete project
 router.delete('/:id', (req, res) => {
   try {
-    const db = getDatabase();
-    db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+    // Delete related data
+    const sets = findAll('sets', { project_id: req.params.id });
+    sets.forEach(s => removeWhere('cost_entries', { set_id: s.id }));
+    removeWhere('sets', { project_id: req.params.id });
+    removeWhere('episodes', { project_id: req.params.id });
+    remove('projects', req.params.id);
     res.json({ message: 'Project deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

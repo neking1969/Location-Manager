@@ -1,8 +1,7 @@
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '../data/cost_tracker.db');
-let db;
+const dbPath = path.join(__dirname, '../data/database.json');
 
 // Cost categories matching the actual spreadsheet
 const COST_CATEGORIES = [
@@ -20,159 +19,111 @@ const DEFAULT_GROUPS = [
   { name: 'Amort', type: 'amortization' }
 ];
 
-function getDatabase() {
-  if (!db) {
-    const fs = require('fs');
-    const dataDir = path.join(__dirname, '../data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
+// In-memory database
+let db = {
+  projects: [],
+  episodes: [],
+  sets: [],
+  cost_entries: [],
+  uploaded_files: []
+};
+
+function loadDatabase() {
+  const dataDir = path.join(__dirname, '../data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
   }
+
+  if (fs.existsSync(dbPath)) {
+    try {
+      const data = fs.readFileSync(dbPath, 'utf8');
+      db = JSON.parse(data);
+    } catch (error) {
+      console.error('Error loading database:', error);
+    }
+  }
+}
+
+function saveDatabase() {
+  try {
+    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+  } catch (error) {
+    console.error('Error saving database:', error);
+  }
+}
+
+function getDatabase() {
   return db;
 }
 
 function initializeDatabase() {
-  const db = getDatabase();
-
-  // Projects table (productions like "Shards")
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      production_company TEXT,
-      start_date TEXT,
-      end_date TEXT,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Episodes/Groups table (101, 102, Backlot, Amort, etc.)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS episodes (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      episode_number TEXT,
-      type TEXT DEFAULT 'episode',
-      sort_order INTEGER DEFAULT 0,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Sets table (specific filming locations)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sets (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      episode_id TEXT,
-      set_name TEXT NOT NULL,
-      location TEXT,
-      budget_loc_fees REAL DEFAULT 0,
-      budget_security REAL DEFAULT 0,
-      budget_fire REAL DEFAULT 0,
-      budget_rentals REAL DEFAULT 0,
-      budget_permits REAL DEFAULT 0,
-      budget_police REAL DEFAULT 0,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE SET NULL
-    )
-  `);
-
-  // Cost entries table (actual costs for each set)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS cost_entries (
-      id TEXT PRIMARY KEY,
-      set_id TEXT NOT NULL,
-      category TEXT NOT NULL,
-      description TEXT,
-      amount REAL NOT NULL DEFAULT 0,
-      vendor TEXT,
-      invoice_number TEXT,
-      po_number TEXT,
-      check_number TEXT,
-      date TEXT,
-      payment_status TEXT DEFAULT 'pending',
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (set_id) REFERENCES sets(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Check requests table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS check_requests (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      set_id TEXT,
-      payee TEXT NOT NULL,
-      amount REAL NOT NULL,
-      category TEXT,
-      description TEXT,
-      date_needed TEXT,
-      date_submitted TEXT,
-      status TEXT DEFAULT 'pending',
-      check_number TEXT,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (set_id) REFERENCES sets(id) ON DELETE SET NULL
-    )
-  `);
-
-  // Permit tracker table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS permits (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      set_id TEXT,
-      permit_type TEXT NOT NULL,
-      location TEXT,
-      jurisdiction TEXT,
-      application_date TEXT,
-      approval_date TEXT,
-      expiration_date TEXT,
-      cost REAL DEFAULT 0,
-      status TEXT DEFAULT 'pending',
-      permit_number TEXT,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (set_id) REFERENCES sets(id) ON DELETE SET NULL
-    )
-  `);
-
-  // Uploaded files tracking
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS uploaded_files (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      filename TEXT NOT NULL,
-      original_name TEXT NOT NULL,
-      file_type TEXT,
-      file_size INTEGER,
-      parsed_data TEXT,
-      upload_type TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-    )
-  `);
-
+  loadDatabase();
   console.log('Database initialized successfully');
+}
+
+// Helper functions for CRUD operations
+function findById(collection, id) {
+  return db[collection].find(item => item.id === id);
+}
+
+function findAll(collection, filter = {}) {
+  let results = db[collection];
+  for (const [key, value] of Object.entries(filter)) {
+    results = results.filter(item => item[key] === value);
+  }
+  return results;
+}
+
+function insert(collection, item) {
+  item.created_at = new Date().toISOString();
+  item.updated_at = new Date().toISOString();
+  db[collection].push(item);
+  saveDatabase();
+  return item;
+}
+
+function update(collection, id, updates) {
+  const index = db[collection].findIndex(item => item.id === id);
+  if (index !== -1) {
+    db[collection][index] = { ...db[collection][index], ...updates, updated_at: new Date().toISOString() };
+    saveDatabase();
+    return db[collection][index];
+  }
+  return null;
+}
+
+function remove(collection, id) {
+  const index = db[collection].findIndex(item => item.id === id);
+  if (index !== -1) {
+    db[collection].splice(index, 1);
+    saveDatabase();
+    return true;
+  }
+  return false;
+}
+
+function removeWhere(collection, filter) {
+  const before = db[collection].length;
+  db[collection] = db[collection].filter(item => {
+    for (const [key, value] of Object.entries(filter)) {
+      if (item[key] === value) return false;
+    }
+    return true;
+  });
+  saveDatabase();
+  return before - db[collection].length;
 }
 
 module.exports = {
   getDatabase,
   initializeDatabase,
+  findById,
+  findAll,
+  insert,
+  update,
+  remove,
+  removeWhere,
+  saveDatabase,
   COST_CATEGORIES,
   DEFAULT_GROUPS
 };

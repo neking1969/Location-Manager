@@ -1,17 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase, COST_CATEGORIES } = require('../database');
+const { getDatabase, findById, findAll, insert, update, remove, saveDatabase, COST_CATEGORIES } = require('../database');
 
 // Get cost entries for a set
 router.get('/set/:setId', (req, res) => {
   try {
     const db = getDatabase();
-    const entries = db.prepare(`
-      SELECT * FROM cost_entries
-      WHERE set_id = ?
-      ORDER BY category, date DESC, created_at DESC
-    `).all(req.params.setId);
+    const entries = db.cost_entries
+      .filter(ce => ce.set_id === req.params.setId)
+      .sort((a, b) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category);
+        return (b.date || '').localeCompare(a.date || '');
+      });
     res.json(entries);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -22,11 +23,9 @@ router.get('/set/:setId', (req, res) => {
 router.get('/set/:setId/category/:category', (req, res) => {
   try {
     const db = getDatabase();
-    const entries = db.prepare(`
-      SELECT * FROM cost_entries
-      WHERE set_id = ? AND category = ?
-      ORDER BY date DESC, created_at DESC
-    `).all(req.params.setId, req.params.category);
+    const entries = db.cost_entries
+      .filter(ce => ce.set_id === req.params.setId && ce.category === req.params.category)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     res.json(entries);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -36,8 +35,7 @@ router.get('/set/:setId/category/:category', (req, res) => {
 // Get single cost entry
 router.get('/:id', (req, res) => {
   try {
-    const db = getDatabase();
-    const entry = db.prepare('SELECT * FROM cost_entries WHERE id = ?').get(req.params.id);
+    const entry = findById('cost_entries', req.params.id);
     if (!entry) {
       return res.status(404).json({ error: 'Cost entry not found' });
     }
@@ -50,25 +48,27 @@ router.get('/:id', (req, res) => {
 // Create cost entry
 router.post('/', (req, res) => {
   try {
-    const db = getDatabase();
-    const id = uuidv4();
     const {
       set_id, category, description, amount, vendor,
       invoice_number, po_number, check_number, date,
       payment_status, notes
     } = req.body;
 
-    db.prepare(`
-      INSERT INTO cost_entries (id, set_id, category, description, amount, vendor,
-        invoice_number, po_number, check_number, date, payment_status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, set_id, category, description, amount || 0, vendor,
-      invoice_number, po_number, check_number, date,
-      payment_status || 'pending', notes
-    );
+    const entry = insert('cost_entries', {
+      id: uuidv4(),
+      set_id,
+      category,
+      description,
+      amount: amount || 0,
+      vendor,
+      invoice_number,
+      po_number,
+      check_number,
+      date,
+      payment_status: payment_status || 'pending',
+      notes
+    });
 
-    const entry = db.prepare('SELECT * FROM cost_entries WHERE id = ?').get(id);
     res.status(201).json(entry);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -81,27 +81,29 @@ router.post('/bulk', (req, res) => {
     const db = getDatabase();
     const { set_id, entries } = req.body;
 
-    const insert = db.prepare(`
-      INSERT INTO cost_entries (id, set_id, category, description, amount, vendor,
-        invoice_number, po_number, check_number, date, payment_status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const createdIds = [];
+    for (const entry of entries) {
+      const id = uuidv4();
+      db.cost_entries.push({
+        id,
+        set_id,
+        category: entry.category,
+        description: entry.description,
+        amount: entry.amount || 0,
+        vendor: entry.vendor,
+        invoice_number: entry.invoice_number,
+        po_number: entry.po_number,
+        check_number: entry.check_number,
+        date: entry.date,
+        payment_status: entry.payment_status || 'pending',
+        notes: entry.notes,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      createdIds.push(id);
+    }
+    saveDatabase();
 
-    const insertMany = db.transaction((entries) => {
-      const created = [];
-      for (const entry of entries) {
-        const id = uuidv4();
-        insert.run(
-          id, set_id, entry.category, entry.description, entry.amount || 0,
-          entry.vendor, entry.invoice_number, entry.po_number, entry.check_number,
-          entry.date, entry.payment_status || 'pending', entry.notes
-        );
-        created.push(id);
-      }
-      return created;
-    });
-
-    const createdIds = insertMany(entries);
     res.status(201).json({ created: createdIds.length, ids: createdIds });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -111,24 +113,24 @@ router.post('/bulk', (req, res) => {
 // Update cost entry
 router.put('/:id', (req, res) => {
   try {
-    const db = getDatabase();
     const {
       category, description, amount, vendor, invoice_number,
       po_number, check_number, date, payment_status, notes
     } = req.body;
 
-    db.prepare(`
-      UPDATE cost_entries
-      SET category = ?, description = ?, amount = ?, vendor = ?,
-          invoice_number = ?, po_number = ?, check_number = ?,
-          date = ?, payment_status = ?, notes = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      category, description, amount, vendor, invoice_number,
-      po_number, check_number, date, payment_status, notes, req.params.id
-    );
+    const entry = update('cost_entries', req.params.id, {
+      category,
+      description,
+      amount,
+      vendor,
+      invoice_number,
+      po_number,
+      check_number,
+      date,
+      payment_status,
+      notes
+    });
 
-    const entry = db.prepare('SELECT * FROM cost_entries WHERE id = ?').get(req.params.id);
     res.json(entry);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -138,8 +140,7 @@ router.put('/:id', (req, res) => {
 // Delete cost entry
 router.delete('/:id', (req, res) => {
   try {
-    const db = getDatabase();
-    db.prepare('DELETE FROM cost_entries WHERE id = ?').run(req.params.id);
+    remove('cost_entries', req.params.id);
     res.json({ message: 'Cost entry deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -150,45 +151,30 @@ router.delete('/:id', (req, res) => {
 router.get('/summary/project/:projectId', (req, res) => {
   try {
     const db = getDatabase();
+    const projectId = req.params.projectId;
 
-    // Get totals by category across all sets
-    const byCategory = db.prepare(`
-      SELECT ce.category,
-        SUM(ce.amount) as total_actual,
-        (SELECT SUM(
-          CASE ce.category
-            WHEN 'Loc Fees' THEN budget_loc_fees
-            WHEN 'Security' THEN budget_security
-            WHEN 'Fire' THEN budget_fire
-            WHEN 'Rentals' THEN budget_rentals
-            WHEN 'Permits' THEN budget_permits
-            WHEN 'Police' THEN budget_police
-          END
-        ) FROM sets WHERE project_id = ?) as total_budget
-      FROM cost_entries ce
-      JOIN sets s ON ce.set_id = s.id
-      WHERE s.project_id = ?
-      GROUP BY ce.category
-    `).all(req.params.projectId, req.params.projectId);
+    // Get all sets for project
+    const projectSets = db.sets.filter(s => s.project_id === projectId);
+    const setIds = projectSets.map(s => s.id);
 
-    // Build complete category summary
+    // Calculate budget totals by category
+    const budgetByCategory = {
+      'Loc Fees': projectSets.reduce((sum, s) => sum + (s.budget_loc_fees || 0), 0),
+      'Security': projectSets.reduce((sum, s) => sum + (s.budget_security || 0), 0),
+      'Fire': projectSets.reduce((sum, s) => sum + (s.budget_fire || 0), 0),
+      'Rentals': projectSets.reduce((sum, s) => sum + (s.budget_rentals || 0), 0),
+      'Permits': projectSets.reduce((sum, s) => sum + (s.budget_permits || 0), 0),
+      'Police': projectSets.reduce((sum, s) => sum + (s.budget_police || 0), 0)
+    };
+
+    // Calculate actual totals by category
+    const projectEntries = db.cost_entries.filter(ce => setIds.includes(ce.set_id));
+
     const summary = COST_CATEGORIES.map(cat => {
-      const found = byCategory.find(c => c.category === cat);
-      const budgetQuery = db.prepare(`
-        SELECT SUM(
-          CASE ?
-            WHEN 'Loc Fees' THEN budget_loc_fees
-            WHEN 'Security' THEN budget_security
-            WHEN 'Fire' THEN budget_fire
-            WHEN 'Rentals' THEN budget_rentals
-            WHEN 'Permits' THEN budget_permits
-            WHEN 'Police' THEN budget_police
-          END
-        ) as total FROM sets WHERE project_id = ?
-      `).get(cat, req.params.projectId);
-
-      const budget = budgetQuery.total || 0;
-      const actual = found?.total_actual || 0;
+      const budget = budgetByCategory[cat] || 0;
+      const actual = projectEntries
+        .filter(e => e.category === cat)
+        .reduce((sum, e) => sum + (e.amount || 0), 0);
 
       return {
         category: cat,

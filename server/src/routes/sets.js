@@ -1,32 +1,50 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase, COST_CATEGORIES } = require('../database');
+const { getDatabase, findById, findAll, insert, update, remove, removeWhere, COST_CATEGORIES } = require('../database');
+
+// Helper to calculate set actuals
+function getSetActuals(db, setId) {
+  const entries = db.cost_entries.filter(ce => ce.set_id === setId);
+  return {
+    actual_loc_fees: entries.filter(e => e.category === 'Loc Fees').reduce((s, e) => s + (e.amount || 0), 0),
+    actual_security: entries.filter(e => e.category === 'Security').reduce((s, e) => s + (e.amount || 0), 0),
+    actual_fire: entries.filter(e => e.category === 'Fire').reduce((s, e) => s + (e.amount || 0), 0),
+    actual_rentals: entries.filter(e => e.category === 'Rentals').reduce((s, e) => s + (e.amount || 0), 0),
+    actual_permits: entries.filter(e => e.category === 'Permits').reduce((s, e) => s + (e.amount || 0), 0),
+    actual_police: entries.filter(e => e.category === 'Police').reduce((s, e) => s + (e.amount || 0), 0)
+  };
+}
 
 // Get all sets for a project
 router.get('/project/:projectId', (req, res) => {
   try {
     const db = getDatabase();
-    const sets = db.prepare(`
-      SELECT s.*,
-        e.name as episode_name,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Loc Fees') as actual_loc_fees,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Security') as actual_security,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Fire') as actual_fire,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Rentals') as actual_rentals,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Permits') as actual_permits,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Police') as actual_police
-      FROM sets s
-      LEFT JOIN episodes e ON s.episode_id = e.id
-      WHERE s.project_id = ?
-      ORDER BY e.sort_order, s.set_name
-    `).all(req.params.projectId);
+    const sets = findAll('sets', { project_id: req.params.projectId });
 
-    res.json(sets.map(s => ({
-      ...s,
-      total_budget: s.budget_loc_fees + s.budget_security + s.budget_fire + s.budget_rentals + s.budget_permits + s.budget_police,
-      total_actual: s.actual_loc_fees + s.actual_security + s.actual_fire + s.actual_rentals + s.actual_permits + s.actual_police
-    })));
+    const result = sets.map(s => {
+      const episode = s.episode_id ? db.episodes.find(e => e.id === s.episode_id) : null;
+      const actuals = getSetActuals(db, s.id);
+
+      return {
+        ...s,
+        episode_name: episode?.name || null,
+        ...actuals,
+        total_budget: (s.budget_loc_fees || 0) + (s.budget_security || 0) + (s.budget_fire || 0) +
+          (s.budget_rentals || 0) + (s.budget_permits || 0) + (s.budget_police || 0),
+        total_actual: actuals.actual_loc_fees + actuals.actual_security + actuals.actual_fire +
+          actuals.actual_rentals + actuals.actual_permits + actuals.actual_police
+      };
+    }).sort((a, b) => {
+      const epA = db.episodes.find(e => e.id === a.episode_id);
+      const epB = db.episodes.find(e => e.id === b.episode_id);
+      const orderA = epA?.sort_order || 0;
+      const orderB = epB?.sort_order || 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.set_name || '').localeCompare(b.set_name || '');
+    });
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -36,24 +54,21 @@ router.get('/project/:projectId', (req, res) => {
 router.get('/episode/:episodeId', (req, res) => {
   try {
     const db = getDatabase();
-    const sets = db.prepare(`
-      SELECT s.*,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Loc Fees') as actual_loc_fees,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Security') as actual_security,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Fire') as actual_fire,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Rentals') as actual_rentals,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Permits') as actual_permits,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Police') as actual_police
-      FROM sets s
-      WHERE s.episode_id = ?
-      ORDER BY s.set_name
-    `).all(req.params.episodeId);
+    const sets = findAll('sets', { episode_id: req.params.episodeId });
 
-    res.json(sets.map(s => ({
-      ...s,
-      total_budget: s.budget_loc_fees + s.budget_security + s.budget_fire + s.budget_rentals + s.budget_permits + s.budget_police,
-      total_actual: s.actual_loc_fees + s.actual_security + s.actual_fire + s.actual_rentals + s.actual_permits + s.actual_police
-    })));
+    const result = sets.map(s => {
+      const actuals = getSetActuals(db, s.id);
+      return {
+        ...s,
+        ...actuals,
+        total_budget: (s.budget_loc_fees || 0) + (s.budget_security || 0) + (s.budget_fire || 0) +
+          (s.budget_rentals || 0) + (s.budget_permits || 0) + (s.budget_police || 0),
+        total_actual: actuals.actual_loc_fees + actuals.actual_security + actuals.actual_fire +
+          actuals.actual_rentals + actuals.actual_permits + actuals.actual_police
+      };
+    }).sort((a, b) => (a.set_name || '').localeCompare(b.set_name || ''));
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -63,35 +78,29 @@ router.get('/episode/:episodeId', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const db = getDatabase();
-    const set = db.prepare(`
-      SELECT s.*,
-        e.name as episode_name,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Loc Fees') as actual_loc_fees,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Security') as actual_security,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Fire') as actual_fire,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Rentals') as actual_rentals,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Permits') as actual_permits,
-        (SELECT COALESCE(SUM(amount), 0) FROM cost_entries WHERE set_id = s.id AND category = 'Police') as actual_police
-      FROM sets s
-      LEFT JOIN episodes e ON s.episode_id = e.id
-      WHERE s.id = ?
-    `).get(req.params.id);
+    const set = findById('sets', req.params.id);
 
     if (!set) {
       return res.status(404).json({ error: 'Set not found' });
     }
 
-    // Get cost entries
-    const costEntries = db.prepare(`
-      SELECT * FROM cost_entries
-      WHERE set_id = ?
-      ORDER BY category, date DESC
-    `).all(req.params.id);
+    const episode = set.episode_id ? db.episodes.find(e => e.id === set.episode_id) : null;
+    const actuals = getSetActuals(db, set.id);
+    const costEntries = db.cost_entries
+      .filter(ce => ce.set_id === req.params.id)
+      .sort((a, b) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category);
+        return (b.date || '').localeCompare(a.date || '');
+      });
 
     res.json({
       ...set,
-      total_budget: set.budget_loc_fees + set.budget_security + set.budget_fire + set.budget_rentals + set.budget_permits + set.budget_police,
-      total_actual: set.actual_loc_fees + set.actual_security + set.actual_fire + set.actual_rentals + set.actual_permits + set.actual_police,
+      episode_name: episode?.name || null,
+      ...actuals,
+      total_budget: (set.budget_loc_fees || 0) + (set.budget_security || 0) + (set.budget_fire || 0) +
+        (set.budget_rentals || 0) + (set.budget_permits || 0) + (set.budget_police || 0),
+      total_actual: actuals.actual_loc_fees + actuals.actual_security + actuals.actual_fire +
+        actuals.actual_rentals + actuals.actual_permits + actuals.actual_police,
       cost_entries: costEntries
     });
   } catch (error) {
@@ -102,26 +111,27 @@ router.get('/:id', (req, res) => {
 // Create set
 router.post('/', (req, res) => {
   try {
-    const db = getDatabase();
-    const id = uuidv4();
     const {
       project_id, episode_id, set_name, location,
       budget_loc_fees, budget_security, budget_fire,
       budget_rentals, budget_permits, budget_police, notes
     } = req.body;
 
-    db.prepare(`
-      INSERT INTO sets (id, project_id, episode_id, set_name, location,
-        budget_loc_fees, budget_security, budget_fire,
-        budget_rentals, budget_permits, budget_police, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, project_id, episode_id, set_name, location,
-      budget_loc_fees || 0, budget_security || 0, budget_fire || 0,
-      budget_rentals || 0, budget_permits || 0, budget_police || 0, notes
-    );
+    const newSet = insert('sets', {
+      id: uuidv4(),
+      project_id,
+      episode_id,
+      set_name,
+      location,
+      budget_loc_fees: budget_loc_fees || 0,
+      budget_security: budget_security || 0,
+      budget_fire: budget_fire || 0,
+      budget_rentals: budget_rentals || 0,
+      budget_permits: budget_permits || 0,
+      budget_police: budget_police || 0,
+      notes
+    });
 
-    const newSet = db.prepare('SELECT * FROM sets WHERE id = ?').get(id);
     res.status(201).json(newSet);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -131,28 +141,25 @@ router.post('/', (req, res) => {
 // Update set
 router.put('/:id', (req, res) => {
   try {
-    const db = getDatabase();
     const {
       episode_id, set_name, location,
       budget_loc_fees, budget_security, budget_fire,
       budget_rentals, budget_permits, budget_police, notes
     } = req.body;
 
-    db.prepare(`
-      UPDATE sets
-      SET episode_id = ?, set_name = ?, location = ?,
-          budget_loc_fees = ?, budget_security = ?, budget_fire = ?,
-          budget_rentals = ?, budget_permits = ?, budget_police = ?,
-          notes = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      episode_id, set_name, location,
-      budget_loc_fees || 0, budget_security || 0, budget_fire || 0,
-      budget_rentals || 0, budget_permits || 0, budget_police || 0,
-      notes, req.params.id
-    );
+    const updatedSet = update('sets', req.params.id, {
+      episode_id,
+      set_name,
+      location,
+      budget_loc_fees: budget_loc_fees || 0,
+      budget_security: budget_security || 0,
+      budget_fire: budget_fire || 0,
+      budget_rentals: budget_rentals || 0,
+      budget_permits: budget_permits || 0,
+      budget_police: budget_police || 0,
+      notes
+    });
 
-    const updatedSet = db.prepare('SELECT * FROM sets WHERE id = ?').get(req.params.id);
     res.json(updatedSet);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -162,8 +169,8 @@ router.put('/:id', (req, res) => {
 // Delete set
 router.delete('/:id', (req, res) => {
   try {
-    const db = getDatabase();
-    db.prepare('DELETE FROM sets WHERE id = ?').run(req.params.id);
+    removeWhere('cost_entries', { set_id: req.params.id });
+    remove('sets', req.params.id);
     res.json({ message: 'Set deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

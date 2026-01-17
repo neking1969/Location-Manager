@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const pdfParse = require('pdf-parse');
-const { getDatabase, COST_CATEGORIES } = require('../database');
+const { getDatabase, findById, insert, remove, saveDatabase, COST_CATEGORIES } = require('../database');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -117,26 +117,22 @@ router.post('/pdf/:projectId', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const db = getDatabase();
     const fileId = uuidv4();
 
     // Parse the PDF
     const parsedEntries = await parsePDF(req.file.path);
 
     // Save file record
-    db.prepare(`
-      INSERT INTO uploaded_files (id, project_id, filename, original_name, file_type, file_size, parsed_data, upload_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      fileId,
-      req.params.projectId,
-      req.file.filename,
-      req.file.originalname,
-      'pdf',
-      req.file.size,
-      JSON.stringify(parsedEntries),
-      'costs'
-    );
+    insert('uploaded_files', {
+      id: fileId,
+      project_id: req.params.projectId,
+      filename: req.file.filename,
+      original_name: req.file.originalname,
+      file_type: 'pdf',
+      file_size: req.file.size,
+      parsed_data: JSON.stringify(parsedEntries),
+      upload_type: 'costs'
+    });
 
     res.json({
       file_id: fileId,
@@ -160,40 +156,33 @@ router.post('/import/:fileId', (req, res) => {
       return res.status(400).json({ error: 'set_id is required' });
     }
 
-    const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(req.params.fileId);
+    const file = findById('uploaded_files', req.params.fileId);
     if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
 
     // Verify set exists
-    const set = db.prepare('SELECT * FROM sets WHERE id = ?').get(set_id);
+    const set = findById('sets', set_id);
     if (!set) {
       return res.status(404).json({ error: 'Set not found' });
     }
 
-    const insert = db.prepare(`
-      INSERT INTO cost_entries
-      (id, set_id, category, description, amount, date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
     let imported = 0;
-    const insertMany = db.transaction((entries) => {
-      for (const entry of entries) {
-        insert.run(
-          uuidv4(),
-          set_id,
-          entry.category,
-          entry.description,
-          entry.amount,
-          entry.date,
-          `Imported from ${file.original_name}`
-        );
-        imported++;
-      }
-    });
-
-    insertMany(entries);
+    for (const entry of entries) {
+      db.cost_entries.push({
+        id: uuidv4(),
+        set_id,
+        category: entry.category,
+        description: entry.description,
+        amount: entry.amount,
+        date: entry.date,
+        notes: `Imported from ${file.original_name}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      imported++;
+    }
+    saveDatabase();
 
     res.json({
       message: `Successfully imported ${imported} entries to ${set.set_name}`,
@@ -208,12 +197,10 @@ router.post('/import/:fileId', (req, res) => {
 router.get('/files/:projectId', (req, res) => {
   try {
     const db = getDatabase();
-    const files = db.prepare(`
-      SELECT id, project_id, filename, original_name, file_type, file_size, upload_type, created_at
-      FROM uploaded_files
-      WHERE project_id = ?
-      ORDER BY created_at DESC
-    `).all(req.params.projectId);
+    const files = db.uploaded_files
+      .filter(f => f.project_id === req.params.projectId)
+      .map(({ parsed_data, ...rest }) => rest) // Exclude parsed_data from response
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     res.json(files);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -223,8 +210,7 @@ router.get('/files/:projectId', (req, res) => {
 // Delete uploaded file
 router.delete('/files/:fileId', (req, res) => {
   try {
-    const db = getDatabase();
-    const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(req.params.fileId);
+    const file = findById('uploaded_files', req.params.fileId);
 
     if (file) {
       // Delete physical file
@@ -234,7 +220,7 @@ router.delete('/files/:fileId', (req, res) => {
       }
 
       // Delete database record
-      db.prepare('DELETE FROM uploaded_files WHERE id = ?').run(req.params.fileId);
+      remove('uploaded_files', req.params.fileId);
     }
 
     res.json({ message: 'File deleted successfully' });
