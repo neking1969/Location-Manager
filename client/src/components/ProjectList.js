@@ -48,6 +48,7 @@ function ProjectList({ onSelectProject }) {
       navigate(`/project/${response.data.id}`);
     } catch (error) {
       console.error('Error creating project:', error);
+      alert('Error creating project. Make sure the server is running.\n\nRun: cd server && npm start');
     }
   };
 
