@@ -1,35 +1,25 @@
-# TV Production Cost Tracker
+# Location Cost Tracker
 
-A web application for Location Managers to compare actual costs from ledgers to budgeted costs for TV production.
+A web application for Location Managers to track and compare actual costs vs budgets for TV production locations. Organized like your tracking spreadsheet with tabs for episodes and sets.
 
 ## Features
 
-- **Project Management**: Create and manage multiple productions
-- **Budget Tracking**: Add and organize budget items by category
-- **Ledger Management**: Track actual expenses with vendor details, invoices, and payment status
-- **PDF Import**: Upload PDFs and automatically extract cost data
-- **Cost Comparison**: Compare budgeted vs actual costs by category, location, or episode
-- **Visual Dashboard**: Charts and summaries showing budget status and spending distribution
+- **Production Management**: Create and manage multiple productions (shows/seasons)
+- **Episode/Tab Organization**: Organize by episodes (101, 102, etc.) or groups (Backlot, Amort)
+- **Set-Based Tracking**: Each filming location (set) has its own budget and cost tracking
+- **Spreadsheet-Style Interface**: Familiar layout matching how you already work
+- **Real-time Variance**: See Under/Over budget status instantly per set and category
+- **PDF Import**: Upload PDFs and extract cost data automatically
 
 ## Cost Categories
 
-Pre-configured categories for Location Management:
-- Location Fees
-- Permits & Licenses
+Matches your actual tracking spreadsheet:
+- Loc Fees
 - Security
-- Parking
-- Site Preparation
-- Site Restoration
-- Catering/Craft Services
-- Crew Accommodations
-- Transportation
-- Equipment Rentals
-- Insurance
-- Utilities
-- Communication
-- Office Supplies
-- Petty Cash
-- Miscellaneous
+- Fire
+- Rentals
+- Permits
+- Police
 
 ## Setup
 
@@ -71,77 +61,67 @@ npm start
 
 ```
 ├── client/                 # React frontend
-│   ├── public/
 │   └── src/
-│       ├── components/     # React components
-│       │   ├── ProjectList.js
-│       │   ├── ProjectDashboard.js
-│       │   ├── BudgetManager.js
-│       │   ├── LedgerManager.js
-│       │   ├── Comparison.js
-│       │   └── Upload.js
+│       ├── components/
+│       │   ├── ProjectList.js    # Production list
+│       │   ├── ProjectView.js    # Main view with episode tabs
+│       │   ├── SetCard.js        # Individual set cost tracking
+│       │   └── SetDetail.js      # Detailed set view
 │       ├── App.js
-│       ├── index.js
 │       └── styles.css
 ├── server/                 # Node.js backend
-│   ├── src/
-│   │   ├── routes/        # API routes
-│   │   │   ├── projects.js
-│   │   │   ├── budgets.js
-│   │   │   ├── ledgers.js
-│   │   │   ├── upload.js
-│   │   │   └── reports.js
-│   │   ├── database.js    # SQLite database
-│   │   └── index.js       # Express server
-│   ├── data/              # SQLite database files
-│   └── uploads/           # Uploaded PDFs
+│   └── src/
+│       ├── routes/
+│       │   ├── projects.js       # Production CRUD
+│       │   ├── episodes.js       # Episode/tab management
+│       │   ├── sets.js           # Set/location management
+│       │   ├── costs.js          # Cost entries
+│       │   ├── reports.js        # Comparison reports
+│       │   └── upload.js         # PDF upload/import
+│       ├── database.js           # SQLite schema
+│       └── index.js
 └── package.json
 ```
 
 ## API Endpoints
 
 ### Projects
-- `GET /api/projects` - List all projects
-- `GET /api/projects/:id` - Get project details
-- `POST /api/projects` - Create project
-- `PUT /api/projects/:id` - Update project
-- `DELETE /api/projects/:id` - Delete project
+- `GET /api/projects` - List all productions
+- `GET /api/projects/:id` - Get production with summary
+- `POST /api/projects` - Create production
+- `DELETE /api/projects/:id` - Delete production
 
-### Budgets
-- `GET /api/budgets/categories` - Get cost categories
-- `GET /api/budgets/project/:projectId` - Get budget items
-- `POST /api/budgets` - Create budget item
-- `POST /api/budgets/bulk` - Bulk create items
-- `PUT /api/budgets/:id` - Update item
-- `DELETE /api/budgets/:id` - Delete item
+### Episodes (Tabs)
+- `GET /api/episodes/project/:projectId` - Get episodes for a production
+- `POST /api/episodes` - Create episode/tab
+- `DELETE /api/episodes/:id` - Delete episode
 
-### Ledgers
-- `GET /api/ledgers/project/:projectId` - Get ledger entries
-- `POST /api/ledgers` - Create entry
-- `POST /api/ledgers/bulk` - Bulk create entries
-- `PUT /api/ledgers/:id` - Update entry
-- `DELETE /api/ledgers/:id` - Delete entry
+### Sets
+- `GET /api/sets/episode/:episodeId` - Get sets for an episode
+- `GET /api/sets/:id` - Get set with cost details
+- `POST /api/sets` - Create set with budget
+- `PUT /api/sets/:id` - Update set budget
+- `DELETE /api/sets/:id` - Delete set
+
+### Costs
+- `GET /api/costs/set/:setId` - Get cost entries for a set
+- `POST /api/costs` - Add cost entry
+- `PUT /api/costs/:id` - Update cost entry
+- `DELETE /api/costs/:id` - Delete cost entry
 
 ### Reports
-- `GET /api/reports/comparison/:projectId` - Budget vs actual comparison
-- `GET /api/reports/dashboard/:projectId` - Dashboard data
-- `GET /api/reports/variance/:projectId` - Detailed variance report
-- `GET /api/reports/by-location/:projectId` - Spending by location
+- `GET /api/reports/dashboard/:projectId` - Dashboard summary
+- `GET /api/reports/comparison/:projectId` - Budget vs actual by category
 - `GET /api/reports/by-episode/:projectId` - Spending by episode
-
-### Upload
-- `POST /api/upload/pdf/:projectId` - Upload and parse PDF
-- `POST /api/upload/import/:fileId` - Import parsed entries
-- `GET /api/upload/files/:projectId` - List uploaded files
-- `DELETE /api/upload/files/:fileId` - Delete uploaded file
+- `GET /api/reports/set/:setId` - Detailed set report
 
 ## Usage
 
-1. **Create a Production**: Start by creating a new production project
-2. **Add Budget Items**: Enter your budgeted costs by category
-3. **Track Expenses**: Add ledger entries as costs are incurred, or upload PDF invoices
-4. **Compare**: Use the comparison view to see budget vs actual spending
-5. **Monitor**: Check the dashboard for at-a-glance status and alerts
+1. **Create a Production**: e.g., "Shards Season 1"
+2. **Add Tabs**: Episodes (101, 102, etc.) and groups (Backlot, Amort) are created automatically, add more as needed
+3. **Add Sets**: For each filming location, add a set with its budget per category
+4. **Track Costs**: Click "+ Add" on any category row to add actual costs
+5. **Monitor**: Each set shows real-time Under/Over budget status
 
 ## License
 

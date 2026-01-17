@@ -3,8 +3,9 @@ const cors = require('cors');
 const path = require('path');
 const { initializeDatabase } = require('./database');
 const projectRoutes = require('./routes/projects');
-const budgetRoutes = require('./routes/budgets');
-const ledgerRoutes = require('./routes/ledgers');
+const episodeRoutes = require('./routes/episodes');
+const setRoutes = require('./routes/sets');
+const costRoutes = require('./routes/costs');
 const uploadRoutes = require('./routes/upload');
 const reportsRoutes = require('./routes/reports');
 
@@ -21,8 +22,9 @@ initializeDatabase();
 
 // Routes
 app.use('/api/projects', projectRoutes);
-app.use('/api/budgets', budgetRoutes);
-app.use('/api/ledgers', ledgerRoutes);
+app.use('/api/episodes', episodeRoutes);
+app.use('/api/sets', setRoutes);
+app.use('/api/costs', costRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportsRoutes);
 

@@ -43,6 +43,9 @@ function ProjectList({ onSelectProject }) {
         end_date: '',
         notes: ''
       });
+      // Navigate to the new project
+      onSelectProject(response.data);
+      navigate(`/project/${response.data.id}`);
     } catch (error) {
       console.error('Error creating project:', error);
     }
@@ -50,12 +53,12 @@ function ProjectList({ onSelectProject }) {
 
   const handleSelectProject = (project) => {
     onSelectProject(project);
-    navigate(`/project/${project.id}/dashboard`);
+    navigate(`/project/${project.id}`);
   };
 
   const handleDelete = async (e, projectId) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this project? All budget and ledger data will be lost.')) {
+    if (window.confirm('Are you sure you want to delete this production? All data will be lost.')) {
       try {
         await axios.delete(`/api/projects/${projectId}`);
         setProjects(projects.filter(p => p.id !== projectId));
@@ -63,13 +66,6 @@ function ProjectList({ onSelectProject }) {
         console.error('Error deleting project:', error);
       }
     }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount || 0);
   };
 
   if (loading) {
@@ -92,9 +88,9 @@ function ProjectList({ onSelectProject }) {
 
         {projects.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">📽️</div>
+            <div className="empty-state-icon">🎬</div>
             <div className="empty-state-title">No Productions Yet</div>
-            <p>Create your first production to start tracking costs.</p>
+            <p>Create your first production to start tracking location costs.</p>
           </div>
         ) : (
           <div className="table-container">
@@ -103,46 +99,32 @@ function ProjectList({ onSelectProject }) {
                 <tr>
                   <th>Production Name</th>
                   <th>Company</th>
-                  <th>Budgeted</th>
-                  <th>Spent</th>
-                  <th>Variance</th>
-                  <th>Status</th>
+                  <th>Episodes</th>
+                  <th>Sets</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {projects.map(project => {
-                  const variance = (project.total_budgeted || 0) - (project.total_spent || 0);
-                  const isOverBudget = variance < 0;
-                  return (
-                    <tr
-                      key={project.id}
-                      onClick={() => handleSelectProject(project)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td><strong>{project.name}</strong></td>
-                      <td>{project.production_company || '-'}</td>
-                      <td className="amount">{formatCurrency(project.total_budgeted)}</td>
-                      <td className="amount">{formatCurrency(project.total_spent)}</td>
-                      <td className={`amount ${isOverBudget ? 'negative' : 'positive'}`}>
-                        {isOverBudget ? '-' : '+'}{formatCurrency(Math.abs(variance))}
-                      </td>
-                      <td>
-                        <span className={`badge ${isOverBudget ? 'badge-danger' : 'badge-success'}`}>
-                          {isOverBudget ? 'Over Budget' : 'Under Budget'}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={(e) => handleDelete(e, project.id)}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {projects.map(project => (
+                  <tr
+                    key={project.id}
+                    onClick={() => handleSelectProject(project)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td><strong>{project.name}</strong></td>
+                    <td>{project.production_company || '-'}</td>
+                    <td>{project.episode_count || 0}</td>
+                    <td>{project.set_count || 0}</td>
+                    <td>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={(e) => handleDelete(e, project.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -165,7 +147,7 @@ function ProjectList({ onSelectProject }) {
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   required
-                  placeholder="e.g., Season 3 - Downtown Locations"
+                  placeholder="e.g., Shards Season 1"
                 />
               </div>
               <div className="form-group">
@@ -205,7 +187,6 @@ function ProjectList({ onSelectProject }) {
                   value={formData.notes}
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
-                  placeholder="Any additional notes..."
                 />
               </div>
               <div className="modal-footer">

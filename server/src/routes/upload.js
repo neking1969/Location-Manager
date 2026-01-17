@@ -75,26 +75,17 @@ function extractCostData(text) {
   return entries;
 }
 
-// Attempt to categorize an entry based on keywords
+// Attempt to categorize an entry based on keywords - updated for new categories
 function categorizeEntry(text) {
   const lowerText = text.toLowerCase();
 
   const categoryKeywords = {
-    'Location Fees': ['location fee', 'rental fee', 'site fee', 'venue fee', 'location rental'],
-    'Permits & Licenses': ['permit', 'license', 'filming permit', 'city permit', 'county permit'],
-    'Security': ['security', 'guard', 'police', 'off-duty', 'watchman'],
-    'Parking': ['parking', 'valet', 'lot rental', 'garage'],
-    'Site Preparation': ['prep', 'setup', 'construction', 'build', 'installation'],
-    'Site Restoration': ['restoration', 'cleanup', 'repair', 'damage', 'restore'],
-    'Catering/Craft Services': ['catering', 'craft', 'food', 'meal', 'lunch', 'breakfast', 'dinner', 'snack'],
-    'Crew Accommodations': ['hotel', 'motel', 'lodging', 'accommodation', 'housing', 'room'],
-    'Transportation': ['transport', 'vehicle', 'truck', 'van', 'shuttle', 'fuel', 'gas', 'mileage'],
-    'Equipment Rentals': ['equipment', 'rental', 'generator', 'tent', 'table', 'chair', 'power'],
-    'Insurance': ['insurance', 'liability', 'coverage', 'bond'],
-    'Utilities': ['utility', 'electric', 'water', 'power hookup', 'generator fuel'],
-    'Communication': ['phone', 'radio', 'walkie', 'internet', 'wifi', 'cell'],
-    'Office Supplies': ['office', 'supplies', 'paper', 'printer', 'copy'],
-    'Petty Cash': ['petty cash', 'pc', 'cash expense', 'miscellaneous cash']
+    'Loc Fees': ['location fee', 'rental fee', 'site fee', 'venue fee', 'location rental', 'loc fee', 'facility fee'],
+    'Security': ['security', 'guard', 'watchman', 'patrol'],
+    'Fire': ['fire', 'fire safety', 'fire watch', 'fire marshal', 'fdny', 'lafd'],
+    'Rentals': ['rental', 'equipment', 'generator', 'tent', 'table', 'chair', 'power dist'],
+    'Permits': ['permit', 'license', 'filming permit', 'city permit', 'county permit', 'film la'],
+    'Police': ['police', 'off-duty', 'officer', 'lapd', 'nypd', 'pd', 'traffic control']
   };
 
   for (const [category, keywords] of Object.entries(categoryKeywords)) {
@@ -103,7 +94,7 @@ function categorizeEntry(text) {
     }
   }
 
-  return 'Miscellaneous';
+  return 'Loc Fees'; // Default to Loc Fees
 }
 
 // Normalize date format
@@ -128,7 +119,6 @@ router.post('/pdf/:projectId', upload.single('file'), async (req, res) => {
 
     const db = getDatabase();
     const fileId = uuidv4();
-    const uploadType = req.body.type || 'ledger'; // 'ledger' or 'budget'
 
     // Parse the PDF
     const parsedEntries = await parsePDF(req.file.path);
@@ -145,7 +135,7 @@ router.post('/pdf/:projectId', upload.single('file'), async (req, res) => {
       'pdf',
       req.file.size,
       JSON.stringify(parsedEntries),
-      uploadType
+      'costs'
     );
 
     res.json({
@@ -160,67 +150,53 @@ router.post('/pdf/:projectId', upload.single('file'), async (req, res) => {
   }
 });
 
-// Import parsed entries
+// Import parsed entries to a specific set
 router.post('/import/:fileId', (req, res) => {
   try {
     const db = getDatabase();
-    const { entries, type } = req.body; // type: 'ledger' or 'budget'
+    const { entries, set_id } = req.body;
+
+    if (!set_id) {
+      return res.status(400).json({ error: 'set_id is required' });
+    }
 
     const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(req.params.fileId);
     if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    let imported = 0;
-
-    if (type === 'ledger') {
-      const insert = db.prepare(`
-        INSERT INTO ledger_entries
-        (id, project_id, category, description, amount, date, source_file)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      const insertMany = db.transaction((entries) => {
-        for (const entry of entries) {
-          insert.run(
-            uuidv4(),
-            file.project_id,
-            entry.category,
-            entry.description,
-            entry.amount,
-            entry.date,
-            file.original_name
-          );
-          imported++;
-        }
-      });
-
-      insertMany(entries);
-    } else if (type === 'budget') {
-      const insert = db.prepare(`
-        INSERT INTO budget_items
-        (id, project_id, category, description, budgeted_amount)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-
-      const insertMany = db.transaction((entries) => {
-        for (const entry of entries) {
-          insert.run(
-            uuidv4(),
-            file.project_id,
-            entry.category,
-            entry.description,
-            entry.amount
-          );
-          imported++;
-        }
-      });
-
-      insertMany(entries);
+    // Verify set exists
+    const set = db.prepare('SELECT * FROM sets WHERE id = ?').get(set_id);
+    if (!set) {
+      return res.status(404).json({ error: 'Set not found' });
     }
 
+    const insert = db.prepare(`
+      INSERT INTO cost_entries
+      (id, set_id, category, description, amount, date, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    let imported = 0;
+    const insertMany = db.transaction((entries) => {
+      for (const entry of entries) {
+        insert.run(
+          uuidv4(),
+          set_id,
+          entry.category,
+          entry.description,
+          entry.amount,
+          entry.date,
+          `Imported from ${file.original_name}`
+        );
+        imported++;
+      }
+    });
+
+    insertMany(entries);
+
     res.json({
-      message: `Successfully imported ${imported} entries`,
+      message: `Successfully imported ${imported} entries to ${set.set_name}`,
       imported_count: imported
     });
   } catch (error) {
@@ -265,6 +241,11 @@ router.delete('/files/:fileId', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Get cost categories
+router.get('/categories', (req, res) => {
+  res.json(COST_CATEGORIES);
 });
 
 module.exports = router;

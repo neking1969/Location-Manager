@@ -6,37 +6,47 @@ const { getDatabase, COST_CATEGORIES } = require('../database');
 router.get('/comparison/:projectId', (req, res) => {
   try {
     const db = getDatabase();
+    const projectId = req.params.projectId;
 
-    // Get budget totals by category
-    const budgetByCategory = db.prepare(`
-      SELECT category, SUM(budgeted_amount) as budgeted
-      FROM budget_items
-      WHERE project_id = ?
-      GROUP BY category
-    `).all(req.params.projectId);
+    // Get budget totals by category from sets
+    const budgetTotals = db.prepare(`
+      SELECT
+        SUM(budget_loc_fees) as budget_loc_fees,
+        SUM(budget_security) as budget_security,
+        SUM(budget_fire) as budget_fire,
+        SUM(budget_rentals) as budget_rentals,
+        SUM(budget_permits) as budget_permits,
+        SUM(budget_police) as budget_police
+      FROM sets WHERE project_id = ?
+    `).get(projectId);
 
-    // Get actual totals by category
-    const actualByCategory = db.prepare(`
+    // Get actual totals by category from cost_entries
+    const actualTotals = db.prepare(`
       SELECT category, SUM(amount) as actual
-      FROM ledger_entries
-      WHERE project_id = ?
+      FROM cost_entries ce
+      JOIN sets s ON ce.set_id = s.id
+      WHERE s.project_id = ?
       GROUP BY category
-    `).all(req.params.projectId);
-
-    // Build comparison map
-    const budgetMap = {};
-    budgetByCategory.forEach(item => {
-      budgetMap[item.category] = item.budgeted;
-    });
+    `).all(projectId);
 
     const actualMap = {};
-    actualByCategory.forEach(item => {
+    actualTotals.forEach(item => {
       actualMap[item.category] = item.actual;
     });
 
+    // Map category names to budget column names
+    const budgetColumnMap = {
+      'Loc Fees': budgetTotals?.budget_loc_fees || 0,
+      'Security': budgetTotals?.budget_security || 0,
+      'Fire': budgetTotals?.budget_fire || 0,
+      'Rentals': budgetTotals?.budget_rentals || 0,
+      'Permits': budgetTotals?.budget_permits || 0,
+      'Police': budgetTotals?.budget_police || 0
+    };
+
     // Create comparison for all categories
     const comparison = COST_CATEGORIES.map(category => {
-      const budgeted = budgetMap[category] || 0;
+      const budgeted = budgetColumnMap[category] || 0;
       const actual = actualMap[category] || 0;
       const variance = budgeted - actual;
       const variancePercent = budgeted > 0 ? ((variance / budgeted) * 100) : (actual > 0 ? -100 : 0);
@@ -72,123 +82,93 @@ router.get('/comparison/:projectId', (req, res) => {
   }
 });
 
-// Get detailed variance report with line items
-router.get('/variance/:projectId', (req, res) => {
-  try {
-    const db = getDatabase();
-    const category = req.query.category;
-
-    let budgetItems, ledgerEntries;
-
-    if (category) {
-      budgetItems = db.prepare(`
-        SELECT * FROM budget_items
-        WHERE project_id = ? AND category = ?
-        ORDER BY description
-      `).all(req.params.projectId, category);
-
-      ledgerEntries = db.prepare(`
-        SELECT * FROM ledger_entries
-        WHERE project_id = ? AND category = ?
-        ORDER BY date DESC
-      `).all(req.params.projectId, category);
-    } else {
-      budgetItems = db.prepare(`
-        SELECT * FROM budget_items
-        WHERE project_id = ?
-        ORDER BY category, description
-      `).all(req.params.projectId);
-
-      ledgerEntries = db.prepare(`
-        SELECT * FROM ledger_entries
-        WHERE project_id = ?
-        ORDER BY category, date DESC
-      `).all(req.params.projectId);
-    }
-
-    res.json({
-      budget_items: budgetItems,
-      ledger_entries: ledgerEntries,
-      budget_total: budgetItems.reduce((sum, item) => sum + item.budgeted_amount, 0),
-      actual_total: ledgerEntries.reduce((sum, entry) => sum + entry.amount, 0)
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Get summary dashboard data
 router.get('/dashboard/:projectId', (req, res) => {
   try {
     const db = getDatabase();
+    const projectId = req.params.projectId;
 
     // Project info
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.projectId);
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Budget total
-    const budgetTotal = db.prepare(`
-      SELECT COALESCE(SUM(budgeted_amount), 0) as total
-      FROM budget_items WHERE project_id = ?
-    `).get(req.params.projectId);
+    // Get episodes
+    const episodes = db.prepare(`
+      SELECT * FROM episodes WHERE project_id = ? ORDER BY sort_order, name
+    `).all(projectId);
 
-    // Actual total
+    // Budget total from sets
+    const budgetTotal = db.prepare(`
+      SELECT COALESCE(SUM(
+        budget_loc_fees + budget_security + budget_fire +
+        budget_rentals + budget_permits + budget_police
+      ), 0) as total
+      FROM sets WHERE project_id = ?
+    `).get(projectId);
+
+    // Actual total from cost_entries
     const actualTotal = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM ledger_entries WHERE project_id = ?
-    `).get(req.params.projectId);
+      SELECT COALESCE(SUM(ce.amount), 0) as total
+      FROM cost_entries ce
+      JOIN sets s ON ce.set_id = s.id
+      WHERE s.project_id = ?
+    `).get(projectId);
 
     // Recent entries
     const recentEntries = db.prepare(`
-      SELECT * FROM ledger_entries
-      WHERE project_id = ?
-      ORDER BY created_at DESC
+      SELECT ce.*, s.set_name
+      FROM cost_entries ce
+      JOIN sets s ON ce.set_id = s.id
+      WHERE s.project_id = ?
+      ORDER BY ce.created_at DESC
       LIMIT 10
-    `).all(req.params.projectId);
+    `).all(projectId);
 
-    // Categories over budget
-    const overBudget = db.prepare(`
+    // Sets over budget
+    const setsOverBudget = db.prepare(`
       SELECT
-        b.category,
-        SUM(b.budgeted_amount) as budgeted,
-        COALESCE((
-          SELECT SUM(amount) FROM ledger_entries
-          WHERE project_id = ? AND category = b.category
-        ), 0) as actual
-      FROM budget_items b
-      WHERE b.project_id = ?
-      GROUP BY b.category
-      HAVING actual > budgeted
-    `).all(req.params.projectId, req.params.projectId);
+        s.id,
+        s.set_name,
+        (s.budget_loc_fees + s.budget_security + s.budget_fire +
+         s.budget_rentals + s.budget_permits + s.budget_police) as total_budget,
+        COALESCE((SELECT SUM(amount) FROM cost_entries WHERE set_id = s.id), 0) as total_actual
+      FROM sets s
+      WHERE s.project_id = ?
+      HAVING total_actual > total_budget AND total_budget > 0
+    `).all(projectId);
 
-    // Entry counts
-    const budgetCount = db.prepare('SELECT COUNT(*) as count FROM budget_items WHERE project_id = ?')
-      .get(req.params.projectId);
-    const ledgerCount = db.prepare('SELECT COUNT(*) as count FROM ledger_entries WHERE project_id = ?')
-      .get(req.params.projectId);
+    // Counts
+    const setCount = db.prepare('SELECT COUNT(*) as count FROM sets WHERE project_id = ?')
+      .get(projectId);
+    const entryCount = db.prepare(`
+      SELECT COUNT(*) as count FROM cost_entries ce
+      JOIN sets s ON ce.set_id = s.id
+      WHERE s.project_id = ?
+    `).get(projectId);
 
     const variance = budgetTotal.total - actualTotal.total;
 
     res.json({
       project,
+      episodes,
       summary: {
-        total_budgeted: budgetTotal.total,
+        total_budget: budgetTotal.total,
         total_actual: actualTotal.total,
         variance,
         variance_percent: budgetTotal.total > 0
           ? Math.round(((variance / budgetTotal.total) * 100) * 100) / 100
           : 0,
         status: variance >= 0 ? 'under_budget' : 'over_budget',
-        budget_item_count: budgetCount.count,
-        ledger_entry_count: ledgerCount.count
+        set_count: setCount.count,
+        entry_count: entryCount.count
       },
-      over_budget_categories: overBudget.map(c => ({
-        ...c,
-        over_by: c.actual - c.budgeted,
-        over_percent: Math.round(((c.actual - c.budgeted) / c.budgeted * 100) * 100) / 100
+      sets_over_budget: setsOverBudget.map(s => ({
+        ...s,
+        over_by: s.total_actual - s.total_budget,
+        over_percent: Math.round(((s.total_actual - s.total_budget) / s.total_budget * 100) * 100) / 100
       })),
       recent_entries: recentEntries
     });
@@ -197,43 +177,31 @@ router.get('/dashboard/:projectId', (req, res) => {
   }
 });
 
-// Get spending by location
-router.get('/by-location/:projectId', (req, res) => {
+// Get spending by set
+router.get('/by-set/:projectId', (req, res) => {
   try {
     const db = getDatabase();
 
-    const byLocation = db.prepare(`
+    const sets = db.prepare(`
       SELECT
-        COALESCE(location_name, 'Unspecified') as location_name,
-        SUM(amount) as total_spent,
-        COUNT(*) as entry_count
-      FROM ledger_entries
-      WHERE project_id = ?
-      GROUP BY location_name
-      ORDER BY total_spent DESC
+        s.id,
+        s.set_name,
+        s.location,
+        e.name as episode_name,
+        (s.budget_loc_fees + s.budget_security + s.budget_fire +
+         s.budget_rentals + s.budget_permits + s.budget_police) as total_budget,
+        COALESCE((SELECT SUM(amount) FROM cost_entries WHERE set_id = s.id), 0) as total_actual
+      FROM sets s
+      LEFT JOIN episodes e ON s.episode_id = e.id
+      WHERE s.project_id = ?
+      ORDER BY e.sort_order, s.set_name
     `).all(req.params.projectId);
 
-    const budgetByLocation = db.prepare(`
-      SELECT
-        COALESCE(location_name, 'Unspecified') as location_name,
-        SUM(budgeted_amount) as total_budgeted
-      FROM budget_items
-      WHERE project_id = ?
-      GROUP BY location_name
-    `).all(req.params.projectId);
-
-    const budgetMap = {};
-    budgetByLocation.forEach(item => {
-      budgetMap[item.location_name] = item.total_budgeted;
-    });
-
-    const locationReport = byLocation.map(loc => ({
-      ...loc,
-      budgeted: budgetMap[loc.location_name] || 0,
-      variance: (budgetMap[loc.location_name] || 0) - loc.total_spent
-    }));
-
-    res.json(locationReport);
+    res.json(sets.map(s => ({
+      ...s,
+      variance: s.total_budget - s.total_actual,
+      status: s.total_actual > s.total_budget ? 'over_budget' : 'under_budget'
+    })));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -244,38 +212,93 @@ router.get('/by-episode/:projectId', (req, res) => {
   try {
     const db = getDatabase();
 
-    const byEpisode = db.prepare(`
+    const episodes = db.prepare(`
       SELECT
-        COALESCE(episode, 'Unspecified') as episode,
-        SUM(amount) as total_spent,
-        COUNT(*) as entry_count
-      FROM ledger_entries
-      WHERE project_id = ?
-      GROUP BY episode
-      ORDER BY episode
+        e.id,
+        e.name,
+        e.episode_number,
+        e.type,
+        COALESCE((
+          SELECT SUM(budget_loc_fees + budget_security + budget_fire +
+                     budget_rentals + budget_permits + budget_police)
+          FROM sets WHERE episode_id = e.id
+        ), 0) as total_budget,
+        COALESCE((
+          SELECT SUM(ce.amount)
+          FROM cost_entries ce
+          JOIN sets s ON ce.set_id = s.id
+          WHERE s.episode_id = e.id
+        ), 0) as total_actual,
+        (SELECT COUNT(*) FROM sets WHERE episode_id = e.id) as set_count
+      FROM episodes e
+      WHERE e.project_id = ?
+      ORDER BY e.sort_order, e.name
     `).all(req.params.projectId);
 
-    const budgetByEpisode = db.prepare(`
-      SELECT
-        COALESCE(episode, 'Unspecified') as episode,
-        SUM(budgeted_amount) as total_budgeted
-      FROM budget_items
-      WHERE project_id = ?
-      GROUP BY episode
-    `).all(req.params.projectId);
+    res.json(episodes.map(ep => ({
+      ...ep,
+      variance: ep.total_budget - ep.total_actual,
+      status: ep.total_actual > ep.total_budget ? 'over_budget' : 'under_budget'
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    const budgetMap = {};
-    budgetByEpisode.forEach(item => {
-      budgetMap[item.episode] = item.total_budgeted;
+// Get detailed report for a specific set
+router.get('/set/:setId', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    const set = db.prepare(`
+      SELECT s.*, e.name as episode_name
+      FROM sets s
+      LEFT JOIN episodes e ON s.episode_id = e.id
+      WHERE s.id = ?
+    `).get(req.params.setId);
+
+    if (!set) {
+      return res.status(404).json({ error: 'Set not found' });
+    }
+
+    // Get all cost entries for this set, grouped by category
+    const costsByCategory = COST_CATEGORIES.map(category => {
+      const budgetColumn = {
+        'Loc Fees': 'budget_loc_fees',
+        'Security': 'budget_security',
+        'Fire': 'budget_fire',
+        'Rentals': 'budget_rentals',
+        'Permits': 'budget_permits',
+        'Police': 'budget_police'
+      }[category];
+
+      const entries = db.prepare(`
+        SELECT * FROM cost_entries
+        WHERE set_id = ? AND category = ?
+        ORDER BY date DESC
+      `).all(req.params.setId, category);
+
+      const actual = entries.reduce((sum, e) => sum + e.amount, 0);
+      const budget = set[budgetColumn] || 0;
+
+      return {
+        category,
+        budget,
+        actual,
+        variance: budget - actual,
+        status: actual > budget ? 'over_budget' : 'under_budget',
+        entries
+      };
     });
 
-    const episodeReport = byEpisode.map(ep => ({
-      ...ep,
-      budgeted: budgetMap[ep.episode] || 0,
-      variance: (budgetMap[ep.episode] || 0) - ep.total_spent
-    }));
-
-    res.json(episodeReport);
+    res.json({
+      set,
+      categories: costsByCategory,
+      totals: {
+        budget: costsByCategory.reduce((sum, c) => sum + c.budget, 0),
+        actual: costsByCategory.reduce((sum, c) => sum + c.actual, 0)
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
