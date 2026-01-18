@@ -88,6 +88,9 @@ jobs:
           # Create bucket if it doesn't exist
           aws s3 mb s3://$BUCKET_NAME --region us-west-2 || true
 
+          # Disable Block Public Access (required for static website hosting)
+          aws s3api put-public-access-block --bucket $BUCKET_NAME --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
           # Enable static website hosting
           aws s3 website s3://$BUCKET_NAME --index-document index.html --error-document index.html
 
