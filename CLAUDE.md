@@ -28,5 +28,26 @@ Automatic via GitHub Actions - just push code and it deploys.
 - `.github/workflows/deploy.yml` - Auto-deployment workflow
 - `.claude/hooks/session-start.sh` - Auto-installs dependencies
 
+## Testing Features
+Run the test script to verify backend functionality:
+```bash
+.claude/hooks/test-feature.sh ledger   # Test ledger upload
+.claude/hooks/test-feature.sh api      # Test core API
+.claude/hooks/test-feature.sh all      # Run all tests
+```
+
+## Autonomous Testing Workflow
+When implementing features, Claude should:
+1. Make code changes
+2. Run `.claude/hooks/test-feature.sh` to verify locally
+3. Fix any failures and re-test
+4. Commit and push to trigger AWS deployment
+5. Verify on deployed URL
+
 ## To Continue Development
 Just tell Claude what you want to build or fix. Dependencies install automatically.
+
+## Current Feature: Multi-Ledger Upload
+- **Component:** `client/src/components/LedgerUpload.js`
+- **Backend:** `server/src/routes/upload.js`
+- **Supports:** Multi-file drag & drop, duplicate detection, GL 505 Disney format parsing

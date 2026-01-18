@@ -58,7 +58,7 @@ function isLedgerFormat(text) {
          /Acct:\s*\d{4}/.test(text);
 }
 
-// Parse production ledger PDF
+// Parse production ledger PDF - Disney GL 505 format
 function parseLedgerPDF(text) {
   const entries = [];
   const lines = text.split('\n');
@@ -69,24 +69,28 @@ function parseLedgerPDF(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect account header (e.g., "Acct: 6304 - LOCATION SECURITY")
-    const accountMatch = line.match(/Acct:\s*(\d{4})\s*-\s*(.+)/);
+    // Detect account header (e.g., "Acct: 6304 - LOCATION SECURITY" or "Acct: 6305 - LOCATION POLICE")
+    const accountMatch = line.match(/Acct:\s*(\d{4})\s*[-–]\s*(.+)/i);
     if (accountMatch) {
       currentAccount = accountMatch[1];
       currentAccountName = accountMatch[2].trim();
+      console.log(`Found account section: ${currentAccount} - ${currentAccountName}`);
       continue;
     }
 
-    // Skip header rows and empty lines
-    if (!currentAccount || !line || line.startsWith('Account') || line.startsWith('GL 505')) {
+    // Skip header rows, empty lines, and non-data rows
+    if (!currentAccount || !line ||
+        line.startsWith('Account') ||
+        line.startsWith('GL 505') ||
+        line.includes('General Ledger') ||
+        line.includes('Company:') ||
+        line.includes('Project:') ||
+        line.includes('Printed On:')) {
       continue;
     }
 
-    // Try to parse a data row
-    // Format: Account LO EPI SET ... Description Vendor Trans# TT ... Amount
-    // The amount is typically at the end, and episode is near the start
-
-    // Look for lines that start with the account code
+    // Look for lines that start with the account code (data rows)
+    // Format: 6305 01 101 QW ... Description ... Vendor ... Amount
     if (line.startsWith(currentAccount)) {
       const entry = parseLedgerLine(line, currentAccount, currentAccountName);
       if (entry) {
@@ -95,53 +99,91 @@ function parseLedgerPDF(text) {
     }
   }
 
+  console.log(`Parsed ${entries.length} entries from ledger`);
   return entries;
 }
 
-// Parse a single ledger line
+// Parse a single ledger line - Disney GL 505 format
+// Format: Account LO EPI SET WC WS F1 F2 F3 F4 IN TaxCode TransferCode Description Vendor Trans# TT JS Cur Period PO# Doc# EffDate PaymentNum Amount
 function parseLedgerLine(line, accountCode, accountName) {
   // Split by multiple spaces to get columns
   const parts = line.split(/\s{2,}/);
 
-  if (parts.length < 5) return null;
+  if (parts.length < 3) return null;
 
-  // Extract episode number (usually 3 digits like 101, 102, 104)
-  const episodeMatch = line.match(/\b(10[1-9]|1[1-9][0-9])\b/);
-  const episode = episodeMatch ? episodeMatch[1] : null;
-
-  // Extract amount (last number with decimals, possibly negative)
-  const amountMatch = line.match(/-?[\d,]+\.\d{2}$/);
+  // Extract amount (last number with decimals, possibly negative, with or without commas)
+  const amountMatch = line.match(/-?[\d,]+\.\d{2}\s*$/);
   if (!amountMatch) return null;
 
-  const amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+  const amount = parseFloat(amountMatch[0].replace(/,/g, '').trim());
   if (isNaN(amount) || amount === 0) return null;
 
-  // Extract date (MM/DD/YYYY format)
-  const dateMatch = line.match(/(\d{2}\/\d{2}\/\d{4})/);
-  const date = dateMatch ? normalizeDate(dateMatch[1]) : null;
+  // Extract episode number - it's typically the 3rd space-separated field (after Account and LO)
+  // Format: 6305 01 101 ...
+  const tokens = line.split(/\s+/);
+  let episode = null;
 
-  // Extract description - look for text after date patterns that describes the cost
-  // Common format: "MM/DD-MM/DD DESCRIPTION" or "MM/DD/YY DESCRIPTION"
+  // Look for 3-digit episode number in early tokens (position 2-4)
+  for (let i = 1; i < Math.min(tokens.length, 6); i++) {
+    if (/^(10[1-9]|1[1-9][0-9]|[2-9][0-9][0-9])$/.test(tokens[i])) {
+      episode = tokens[i];
+      break;
+    }
+  }
+
+  // Extract date from description (format: MM/DD/YY or MM/DD/YYYY)
+  // Disney format usually has date in description like "10/25/25 : NAME : TYPE"
+  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  let date = null;
+  if (dateMatch) {
+    date = normalizeDate(dateMatch[1]);
+  }
+
+  // Extract description - look for the pattern "DATE : NAME : TYPE" or similar
   let description = '';
-  const descMatch = line.match(/\d{2}\/\d{2}[-\/]\d{2}\/?\d{0,2}\s+([A-Z][A-Z0-9\s:,\-\.]+?)(?=\s{2,}|\s+[A-Z]{2,}\s+\d)/i);
+  const descMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4}\s*:\s*[^:]+(?::\s*[^:]+)?)/i);
   if (descMatch) {
     description = descMatch[1].trim();
   } else {
-    // Fallback: extract text between account info and vendor
-    const fallbackMatch = line.match(/(?:QE|QW|USA)\s+(?:CA\s+)?(?:QE|QW)?\s*(.+?)(?=\s{2,}[A-Z])/);
+    // Fallback: try to extract text between early columns and vendor
+    const fallbackMatch = line.match(/(?:QW|QE|USA|CA)\s+(.+?)(?=\s{2,}[A-Z]{3,})/);
     if (fallbackMatch) {
       description = fallbackMatch[1].trim();
     }
   }
 
-  // Extract vendor name (usually in caps, before the transaction number)
+  // Extract vendor name - look for known vendors or caps words before numbers
   let vendor = '';
-  const vendorMatch = line.match(/([A-Z][A-Z\s&\.]+(?:INC|LLC|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVIC)?\w*)\s+\d{3,}/);
-  if (vendorMatch) {
-    vendor = vendorMatch[1].trim();
+
+  // Common vendors in entertainment industry
+  const vendorPatterns = [
+    /ENTERTAINMENT\s+PARTNERS/i,
+    /UNIVERSAL\s+STUDIOS/i,
+    /WARNER\s+BROS/i,
+    /DISNEY/i,
+    /TWENTIETH\s+CENTURY/i,
+    /FILM\s+LA/i,
+    /LAPD/i,
+    /([A-Z][A-Z\s&\.]{3,}(?:INC|LLC|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVICES?|COMPANY|CORP)?)\s+\d{3,}/i
+  ];
+
+  for (const pattern of vendorPatterns) {
+    const match = line.match(pattern);
+    if (match) {
+      vendor = (match[1] || match[0]).trim();
+      break;
+    }
   }
 
-  // Extract location from description
+  // If no vendor found, try generic extraction
+  if (!vendor) {
+    const genericMatch = line.match(/([A-Z][A-Z\s&\.]{5,}?)\s+\d{4}/);
+    if (genericMatch) {
+      vendor = genericMatch[1].trim();
+    }
+  }
+
+  // Extract location from description - for police/security, often the officer name is in description
   const location = extractLocationFromDescription(description, accountName);
 
   // Determine category from account code
@@ -152,13 +194,20 @@ function parseLedgerLine(line, accountCode, accountName) {
     category = subcategorize6342(description);
   }
 
+  // Clean up description
+  if (!description || description.length < 3) {
+    description = `${accountName} - ${vendor || 'Vendor charge'}`;
+  }
+
+  console.log(`Parsed entry: Episode ${episode}, ${category}, ${vendor}, $${amount}`);
+
   return {
     account_code: accountCode,
     account_name: accountName,
     episode,
     location,
     category,
-    description: description || `${accountName} charge`,
+    description: description,
     vendor,
     amount,
     date,
