@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import SetCard from './SetCard';
-import LedgerImport from './LedgerImport';
+import LedgerUpload from './LedgerUpload';
 
 function ProjectView({ onProjectLoad }) {
   const { projectId } = useParams();
@@ -508,18 +508,23 @@ function ProjectView({ onProjectLoad }) {
         </div>
       )}
 
-      {/* Ledger Import Modal */}
+      {/* Ledger Upload Modal */}
       {showLedgerImport && (
-        <LedgerImport
-          projectId={projectId}
-          onClose={() => setShowLedgerImport(false)}
-          onImportComplete={() => {
-            fetchProjectData();
-            if (activeTab) {
-              fetchSetsForEpisode(activeTab);
-            }
-          }}
-        />
+        <div className="modal-overlay" onClick={() => setShowLedgerImport(false)}>
+          <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+            <LedgerUpload
+              projectId={projectId}
+              onClose={() => setShowLedgerImport(false)}
+              onImportComplete={() => {
+                setShowLedgerImport(false);
+                fetchProjectData();
+                if (activeTab) {
+                  fetchSetsForEpisode(activeTab);
+                }
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

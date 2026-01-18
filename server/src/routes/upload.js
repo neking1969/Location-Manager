@@ -570,4 +570,191 @@ router.get('/categories', (req, res) => {
   res.json(COST_CATEGORIES);
 });
 
+// Check for duplicate entries
+router.post('/check-duplicates/:projectId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { entries } = req.body;
+    const projectId = req.params.projectId;
+
+    if (!entries || !Array.isArray(entries)) {
+      return res.status(400).json({ error: 'Entries array is required' });
+    }
+
+    // Get all existing cost entries for this project
+    const projectSets = db.sets.filter(s => s.project_id === projectId);
+    const setIds = new Set(projectSets.map(s => s.id));
+    const existingEntries = db.cost_entries.filter(e => setIds.has(e.set_id));
+
+    // Build a lookup map for existing entries
+    // Key: normalized combination of vendor + amount + date + category
+    const existingMap = new Map();
+    existingEntries.forEach(entry => {
+      const key = normalizeEntryKey(entry);
+      if (!existingMap.has(key)) {
+        existingMap.set(key, []);
+      }
+      existingMap.get(key).push(entry);
+    });
+
+    const duplicates = [];
+    const newEntries = [];
+
+    entries.forEach((entry, index) => {
+      const key = normalizeEntryKey(entry);
+      const matches = existingMap.get(key);
+
+      if (matches && matches.length > 0) {
+        duplicates.push({
+          id: `dup_${index}_${Date.now()}`,
+          originalEntryIndex: index,
+          ...entry,
+          existingMatches: matches.map(m => ({
+            id: m.id,
+            vendor: m.vendor,
+            amount: m.amount,
+            date: m.date,
+            category: m.category
+          }))
+        });
+      } else {
+        newEntries.push(entry);
+      }
+    });
+
+    res.json({
+      total: entries.length,
+      duplicates,
+      newEntries,
+      duplicateCount: duplicates.length,
+      newCount: newEntries.length
+    });
+  } catch (error) {
+    console.error('Duplicate check error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to normalize entry key for duplicate detection
+function normalizeEntryKey(entry) {
+  const vendor = (entry.vendor || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const amount = Math.abs(parseFloat(entry.amount) || 0).toFixed(2);
+  const date = entry.date || '';
+  const category = (entry.category || '').toLowerCase();
+
+  return `${vendor}|${amount}|${date}|${category}`;
+}
+
+// Enhanced ledger import with custom entries support
+router.post('/ledger/import-custom/:projectId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { entries } = req.body;
+    const projectId = req.params.projectId;
+
+    if (!entries || !Array.isArray(entries)) {
+      return res.status(400).json({ error: 'Entries array is required' });
+    }
+
+    let episodesCreated = 0;
+    let setsCreated = 0;
+    let entriesImported = 0;
+
+    // Get existing episodes
+    const existingEpisodes = findAll('episodes', { project_id: projectId });
+    const episodeMap = {};
+    existingEpisodes.forEach(ep => {
+      episodeMap[ep.episode_number || ep.name] = ep.id;
+    });
+
+    // Group entries by episode and location
+    const grouped = {};
+    entries.forEach(entry => {
+      const key = `${entry.episode || 'unknown'}_${entry.location || 'General'}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          episode: entry.episode,
+          location: entry.location,
+          entries: []
+        };
+      }
+      grouped[key].entries.push(entry);
+    });
+
+    // Process each group
+    for (const group of Object.values(grouped)) {
+      const episodeNum = group.episode;
+
+      // Create or find episode
+      let episodeId = episodeMap[episodeNum];
+      if (!episodeId && episodeNum) {
+        const newEpisode = insert('episodes', {
+          id: uuidv4(),
+          project_id: projectId,
+          name: episodeNum,
+          episode_number: episodeNum,
+          type: 'episode',
+          sort_order: parseInt(episodeNum) || 999
+        });
+        episodeId = newEpisode.id;
+        episodeMap[episodeNum] = episodeId;
+        episodesCreated++;
+      }
+
+      // Create or find set for this location
+      const existingSets = findAll('sets', { project_id: projectId });
+      let set = existingSets.find(s =>
+        s.set_name === group.location &&
+        s.episode_id === episodeId
+      );
+
+      if (!set) {
+        set = insert('sets', {
+          id: uuidv4(),
+          project_id: projectId,
+          episode_id: episodeId,
+          set_name: group.location,
+          location: group.location,
+          budget_loc_fees: 0,
+          budget_security: 0,
+          budget_fire: 0,
+          budget_rentals: 0,
+          budget_permits: 0,
+          budget_police: 0
+        });
+        setsCreated++;
+      }
+
+      // Import entries for this group
+      for (const entry of group.entries) {
+        db.cost_entries.push({
+          id: uuidv4(),
+          set_id: set.id,
+          category: entry.category,
+          description: entry.description,
+          vendor: entry.vendor,
+          amount: entry.amount,
+          date: entry.date,
+          notes: `Imported from ledger - Account ${entry.account_code || 'N/A'}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        entriesImported++;
+      }
+    }
+
+    saveDatabase();
+
+    res.json({
+      message: 'Entries imported successfully',
+      episodes_created: episodesCreated,
+      sets_created: setsCreated,
+      entries_imported: entriesImported
+    });
+  } catch (error) {
+    console.error('Custom import error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
