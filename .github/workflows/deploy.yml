@@ -5,7 +5,8 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:  # Allow manual trigger
+      - claude/tv-production-cost-tracker-wlw8D
+  workflow_dispatch:
 
 jobs:
   deploy-backend:
@@ -29,7 +30,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: us-west-2
 
       - name: Install backend dependencies
         run: cd server && npm install
@@ -46,7 +47,6 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --resolve-s3
 
-          # Get the API URL from CloudFormation outputs
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name location-manager \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
@@ -71,46 +71,46 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: us-west-2
 
       - name: Install frontend dependencies
         run: cd client && npm install
 
       - name: Build frontend
-        run: |
-          cd client
-          REACT_APP_API_URL=${{ needs.deploy-backend.outputs.api_url }} npm run build
+        env:
+          REACT_APP_API_URL: ${{ needs.deploy-backend.outputs.api_url }}
+        run: cd client && npm run build
 
       - name: Deploy to S3
         run: |
+          BUCKET_NAME="location-manager-frontend-app"
+
           # Create bucket if it doesn't exist
-          aws s3 mb s3://location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || 'app' }} --region ${{ secrets.AWS_REGION || 'us-east-1' }} || true
+          aws s3 mb s3://$BUCKET_NAME --region us-west-2 || true
 
           # Enable static website hosting
-          aws s3 website s3://location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || 'app' }} --index-document index.html --error-document index.html
+          aws s3 website s3://$BUCKET_NAME --index-document index.html --error-document index.html
 
           # Sync build files
-          aws s3 sync client/build s3://location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || 'app' }} --delete
+          aws s3 sync client/build s3://$BUCKET_NAME --delete
 
-          # Make bucket public (for static website)
-          aws s3api put-bucket-policy --bucket location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || 'app' }} --policy '{
-            "Version": "2012-10-17",
-            "Statement": [{
-              "Sid": "PublicReadGetObject",
-              "Effect": "Allow",
-              "Principal": "*",
-              "Action": "s3:GetObject",
-              "Resource": "arn:aws:s3:::location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || '\''app'\'' }}/*"
+          # Make bucket public
+          aws s3api put-bucket-policy --bucket $BUCKET_NAME --policy "{
+            \"Version\": \"2012-10-17\",
+            \"Statement\": [{
+              \"Sid\": \"PublicReadGetObject\",
+              \"Effect\": \"Allow\",
+              \"Principal\": \"*\",
+              \"Action\": \"s3:GetObject\",
+              \"Resource\": \"arn:aws:s3:::$BUCKET_NAME/*\"
             }]
-          }'
+          }"
 
       - name: Print deployment URL
         run: |
           echo "=========================================="
           echo "DEPLOYMENT COMPLETE!"
           echo "=========================================="
-          echo ""
-          echo "Frontend: http://location-manager-frontend-${{ secrets.AWS_ACCOUNT_ID || 'app' }}.s3-website-${{ secrets.AWS_REGION || 'us-east-1' }}.amazonaws.com"
-          echo ""
+          echo "Frontend: http://location-manager-frontend-app.s3-website-us-west-2.amazonaws.com"
           echo "API: ${{ needs.deploy-backend.outputs.api_url }}"
           echo "=========================================="
