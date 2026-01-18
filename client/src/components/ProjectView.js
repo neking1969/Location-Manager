@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import SetCard from './SetCard';
+import LedgerImport from './LedgerImport';
 
 const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
 
@@ -23,6 +24,7 @@ function ProjectView({ onProjectLoad }) {
   });
   const [editingSet, setEditingSet] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [showLedgerImport, setShowLedgerImport] = useState(false);
 
   useEffect(() => {
     fetchProjectData();
@@ -205,9 +207,14 @@ function ProjectView({ onProjectLoad }) {
               <p style={{ color: 'var(--gray-500)' }}>{project.production_company}</p>
             )}
           </div>
-          <button className="btn btn-secondary" onClick={() => navigate('/')}>
-            Back to Projects
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-primary" onClick={() => setShowLedgerImport(true)}>
+              Import Ledger
+            </button>
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>
+              Back to Projects
+            </button>
+          </div>
         </div>
       </div>
 
@@ -501,6 +508,20 @@ function ProjectView({ onProjectLoad }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Ledger Import Modal */}
+      {showLedgerImport && (
+        <LedgerImport
+          projectId={projectId}
+          onClose={() => setShowLedgerImport(false)}
+          onImportComplete={() => {
+            fetchProjectData();
+            if (activeTab) {
+              fetchSetsForEpisode(activeTab);
+            }
+          }}
+        />
       )}
     </div>
   );
