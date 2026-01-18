@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link } from 'react-router-dom';
 import ProjectList from './components/ProjectList';
 import ProjectView from './components/ProjectView';
 import SetDetail from './components/SetDetail';
 
 function App() {
-  const location = useLocation();
   const [currentProject, setCurrentProject] = useState(null);
 
   return (

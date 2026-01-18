@@ -1,0 +1,63 @@
+{
+  "projects": [
+    {
+      "id": "4ab1d4f1-ac26-4199-8aed-3b8bbfd986a2",
+      "name": "Test Production",
+      "production_company": "Test Studios",
+      "created_at": "2026-01-18T00:54:08.036Z",
+      "updated_at": "2026-01-18T00:54:08.036Z"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "dbaea8eb-79e0-465a-87c6-d69bebe405bf",
+      "project_id": "4ab1d4f1-ac26-4199-8aed-3b8bbfd986a2",
+      "name": "Backlot",
+      "type": "location_group",
+      "sort_order": 0,
+      "created_at": "2026-01-18T00:54:08.037Z",
+      "updated_at": "2026-01-18T00:54:08.037Z"
+    },
+    {
+      "id": "ba276d39-d756-49d8-ad4a-dfff06e276e1",
+      "project_id": "4ab1d4f1-ac26-4199-8aed-3b8bbfd986a2",
+      "name": "Amort",
+      "type": "amortization",
+      "sort_order": 1,
+      "created_at": "2026-01-18T00:54:08.037Z",
+      "updated_at": "2026-01-18T00:54:08.037Z"
+    }
+  ],
+  "sets": [
+    {
+      "id": "5dc2f9c0-4741-471c-a589-6c1344672d29",
+      "project_id": "4ab1d4f1-ac26-4199-8aed-3b8bbfd986a2",
+      "episode_id": "dbaea8eb-79e0-465a-87c6-d69bebe405bf",
+      "set_name": "Downtown Office",
+      "location": "123 Main St",
+      "budget_loc_fees": 5000,
+      "budget_security": 2000,
+      "budget_fire": 500,
+      "budget_rentals": 1000,
+      "budget_permits": 300,
+      "budget_police": 800,
+      "created_at": "2026-01-18T00:54:30.808Z",
+      "updated_at": "2026-01-18T00:54:30.808Z"
+    }
+  ],
+  "cost_entries": [
+    {
+      "id": "a9299017-44db-4eed-87f0-87a210ef1a11",
+      "set_id": "5dc2f9c0-4741-471c-a589-6c1344672d29",
+      "category": "Security",
+      "description": "On-set security for day 1",
+      "amount": 1500,
+      "vendor": "SecureGuard Inc",
+      "date": "2026-01-15",
+      "payment_status": "pending",
+      "created_at": "2026-01-18T00:54:40.948Z",
+      "updated_at": "2026-01-18T00:54:40.948Z"
+    }
+  ],
+  "uploaded_files": []
+}

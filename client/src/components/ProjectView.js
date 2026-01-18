@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import SetCard from './SetCard';
 import LedgerImport from './LedgerImport';
-
-const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
 
 function ProjectView({ onProjectLoad }) {
   const { projectId } = useParams();
@@ -26,17 +24,7 @@ function ProjectView({ onProjectLoad }) {
   const [summary, setSummary] = useState(null);
   const [showLedgerImport, setShowLedgerImport] = useState(false);
 
-  useEffect(() => {
-    fetchProjectData();
-  }, [projectId]);
-
-  useEffect(() => {
-    if (activeTab) {
-      fetchSetsForEpisode(activeTab);
-    }
-  }, [activeTab]);
-
-  const fetchProjectData = async () => {
+  const fetchProjectData = useCallback(async () => {
     try {
       const [projectRes, episodesRes, summaryRes] = await Promise.all([
         axios.get(`/api/projects/${projectId}`),
@@ -53,15 +41,25 @@ function ProjectView({ onProjectLoad }) {
       }
 
       // Set first tab as active
-      if (episodesRes.data.length > 0 && !activeTab) {
-        setActiveTab(episodesRes.data[0].id);
+      if (episodesRes.data.length > 0) {
+        setActiveTab(prev => prev || episodesRes.data[0].id);
       }
     } catch (error) {
       console.error('Error fetching project:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, onProjectLoad]);
+
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
+
+  useEffect(() => {
+    if (activeTab) {
+      fetchSetsForEpisode(activeTab);
+    }
+  }, [activeTab]);
 
   const fetchSetsForEpisode = async (episodeId) => {
     try {
