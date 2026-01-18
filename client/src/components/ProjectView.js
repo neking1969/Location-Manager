@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import SetCard from './SetCard';
 import LedgerImport from './LedgerImport';
-
-const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
 
 function ProjectView({ onProjectLoad }) {
   const { projectId } = useParams();
@@ -26,22 +24,12 @@ function ProjectView({ onProjectLoad }) {
   const [summary, setSummary] = useState(null);
   const [showLedgerImport, setShowLedgerImport] = useState(false);
 
-  useEffect(() => {
-    fetchProjectData();
-  }, [projectId]);
-
-  useEffect(() => {
-    if (activeTab) {
-      fetchSetsForEpisode(activeTab);
-    }
-  }, [activeTab]);
-
-  const fetchProjectData = async () => {
+  const fetchProjectData = useCallback(async () => {
     try {
       const [projectRes, episodesRes, summaryRes] = await Promise.all([
-        axios.get(`/api/projects/${projectId}`),
-        axios.get(`/api/episodes/project/${projectId}`),
-        axios.get(`/api/reports/dashboard/${projectId}`)
+        api.get(`/api/projects/${projectId}`),
+        api.get(`/api/episodes/project/${projectId}`),
+        api.get(`/api/reports/dashboard/${projectId}`)
       ]);
 
       setProject(projectRes.data);
@@ -53,29 +41,39 @@ function ProjectView({ onProjectLoad }) {
       }
 
       // Set first tab as active
-      if (episodesRes.data.length > 0 && !activeTab) {
-        setActiveTab(episodesRes.data[0].id);
+      if (episodesRes.data.length > 0) {
+        setActiveTab(prev => prev || episodesRes.data[0].id);
       }
     } catch (error) {
       console.error('Error fetching project:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, onProjectLoad]);
 
-  const fetchSetsForEpisode = async (episodeId) => {
+  const fetchSetsForEpisode = useCallback(async (episodeId) => {
     try {
-      const response = await axios.get(`/api/sets/episode/${episodeId}`);
+      const response = await api.get(`/api/sets/episode/${episodeId}`);
       setSets(response.data);
     } catch (error) {
       console.error('Error fetching sets:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
+
+  useEffect(() => {
+    if (activeTab) {
+      fetchSetsForEpisode(activeTab);
+    }
+  }, [activeTab, fetchSetsForEpisode]);
 
   const handleAddEpisode = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('/api/episodes', {
+      const response = await api.post('/api/episodes', {
         project_id: projectId,
         ...episodeForm
       });
@@ -107,9 +105,9 @@ function ProjectView({ onProjectLoad }) {
       };
 
       if (editingSet) {
-        await axios.put(`/api/sets/${editingSet.id}`, payload);
+        await api.put(`/api/sets/${editingSet.id}`, payload);
       } else {
-        await axios.post('/api/sets', payload);
+        await api.post('/api/sets', payload);
       }
 
       fetchSetsForEpisode(activeTab);
@@ -138,7 +136,7 @@ function ProjectView({ onProjectLoad }) {
   const handleDeleteSet = async (setId) => {
     if (window.confirm('Are you sure you want to delete this set and all its costs?')) {
       try {
-        await axios.delete(`/api/sets/${setId}`);
+        await api.delete(`/api/sets/${setId}`);
         fetchSetsForEpisode(activeTab);
         fetchProjectData();
       } catch (error) {
@@ -150,7 +148,7 @@ function ProjectView({ onProjectLoad }) {
   const handleDeleteEpisode = async (episodeId) => {
     if (window.confirm('Are you sure you want to delete this episode/tab and all its sets?')) {
       try {
-        await axios.delete(`/api/episodes/${episodeId}`);
+        await api.delete(`/api/episodes/${episodeId}`);
         const newEpisodes = episodes.filter(e => e.id !== episodeId);
         setEpisodes(newEpisodes);
         if (activeTab === episodeId) {

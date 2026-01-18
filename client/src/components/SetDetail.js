@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-
-const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
+import api from '../api';
 
 function SetDetail() {
   const { setId } = useParams();
@@ -10,20 +8,20 @@ function SetDetail() {
   const [setData, setSetData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSetData();
-  }, [setId]);
-
-  const fetchSetData = async () => {
+  const fetchSetData = useCallback(async () => {
     try {
-      const response = await axios.get(`/api/reports/set/${setId}`);
+      const response = await api.get(`/api/reports/set/${setId}`);
       setSetData(response.data);
     } catch (error) {
       console.error('Error fetching set:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [setId]);
+
+  useEffect(() => {
+    fetchSetData();
+  }, [fetchSetData]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {

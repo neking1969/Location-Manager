@@ -1,7 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { initializeDatabase } = require('./database');
+
+// Use DynamoDB in Lambda, file-based locally
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const { initializeDatabase } = isLambda
+  ? require('./database-dynamodb')
+  : require('./database');
+
 const projectRoutes = require('./routes/projects');
 const episodeRoutes = require('./routes/episodes');
 const setRoutes = require('./routes/sets');
@@ -41,6 +47,12 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Only start server when not in Lambda
+if (!isLambda) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Export for Lambda
+module.exports = app;
