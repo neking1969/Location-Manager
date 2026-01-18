@@ -6,6 +6,7 @@ on:
       - main
       - master
       - claude/tv-production-cost-tracker-wlw8D
+      - claude/setup-session-hook-p5CBo
   workflow_dispatch:
 
 jobs:
