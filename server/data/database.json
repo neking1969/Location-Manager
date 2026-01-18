@@ -1,0 +1,58 @@
+{
+  "projects": [
+    {
+      "id": "0946fbbf-d8c2-4fbc-a473-e6445e05ca60",
+      "name": "Test Production",
+      "created_at": "2026-01-18T01:07:37.634Z",
+      "updated_at": "2026-01-18T01:07:37.634Z"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "878797f1-b0cf-4816-abd2-22fa6595a021",
+      "project_id": "0946fbbf-d8c2-4fbc-a473-e6445e05ca60",
+      "name": "Backlot",
+      "type": "location_group",
+      "sort_order": 0,
+      "created_at": "2026-01-18T01:07:37.635Z",
+      "updated_at": "2026-01-18T01:07:37.635Z"
+    },
+    {
+      "id": "031be46e-3cc6-4219-8fb9-8331b7504e70",
+      "project_id": "0946fbbf-d8c2-4fbc-a473-e6445e05ca60",
+      "name": "Amort",
+      "type": "amortization",
+      "sort_order": 1,
+      "created_at": "2026-01-18T01:07:37.635Z",
+      "updated_at": "2026-01-18T01:07:37.635Z"
+    }
+  ],
+  "sets": [
+    {
+      "id": "8c504e7b-9b47-4f5e-ad9f-c6927ed9e7d7",
+      "episode_id": "878797f1-b0cf-4816-abd2-22fa6595a021",
+      "budget_loc_fees": 5000,
+      "budget_security": 2000,
+      "budget_fire": 1000,
+      "budget_rentals": 1500,
+      "budget_permits": 600,
+      "budget_police": 400,
+      "created_at": "2026-01-18T01:08:03.110Z",
+      "updated_at": "2026-01-18T01:08:03.110Z"
+    }
+  ],
+  "cost_entries": [
+    {
+      "id": "38f3a39e-f09a-4d54-b73b-4d9ecc354a0b",
+      "set_id": "8c504e7b-9b47-4f5e-ad9f-c6927ed9e7d7",
+      "category": "Security",
+      "description": "Night security guard",
+      "amount": 1800,
+      "vendor": "SecureCo",
+      "payment_status": "pending",
+      "created_at": "2026-01-18T01:08:11.907Z",
+      "updated_at": "2026-01-18T01:08:11.907Z"
+    }
+  ],
+  "uploaded_files": []
+}
