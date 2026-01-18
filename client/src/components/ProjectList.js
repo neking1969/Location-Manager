@@ -43,7 +43,6 @@ function ProjectList({ onSelectProject }) {
         end_date: '',
         notes: ''
       });
-      // Navigate to the new project
       onSelectProject(response.data);
       navigate(`/project/${response.data.id}`);
     } catch (error) {
@@ -79,58 +78,66 @@ function ProjectList({ onSelectProject }) {
 
   return (
     <div>
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Productions</h2>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            + New Production
-          </button>
-        </div>
+      <div className="section-header">
+        <h2 className="section-title">Productions</h2>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          + New Production
+        </button>
+      </div>
 
-        {projects.length === 0 ? (
+      {projects.length === 0 ? (
+        <div className="card">
           <div className="empty-state">
             <div className="empty-state-icon">🎬</div>
             <div className="empty-state-title">No Productions Yet</div>
             <p>Create your first production to start tracking location costs.</p>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowModal(true)}
+              style={{ marginTop: '1.5rem' }}
+            >
+              + Create Production
+            </button>
           </div>
-        ) : (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Production Name</th>
-                  <th>Company</th>
-                  <th>Episodes</th>
-                  <th>Sets</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map(project => (
-                  <tr
-                    key={project.id}
-                    onClick={() => handleSelectProject(project)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td><strong>{project.name}</strong></td>
-                    <td>{project.production_company || '-'}</td>
-                    <td>{project.episode_count || 0}</td>
-                    <td>{project.set_count || 0}</td>
-                    <td>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={(e) => handleDelete(e, project.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="projects-grid">
+          {projects.map(project => (
+            <div
+              key={project.id}
+              className="project-card"
+              onClick={() => handleSelectProject(project)}
+            >
+              <div className="project-card-header">
+                <div className="project-card-title">{project.name}</div>
+                <div className="project-card-company">
+                  {project.production_company || 'No company'}
+                </div>
+              </div>
+              <div className="project-card-body">
+                <div className="project-card-stats">
+                  <div className="project-card-stat">
+                    <div className="project-card-stat-value">{project.episode_count || 0}</div>
+                    <div className="project-card-stat-label">Episodes</div>
+                  </div>
+                  <div className="project-card-stat">
+                    <div className="project-card-stat-value">{project.set_count || 0}</div>
+                    <div className="project-card-stat-label">Sets</div>
+                  </div>
+                </div>
+              </div>
+              <div className="project-card-footer">
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={(e) => handleDelete(e, project.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -139,66 +146,69 @@ function ProjectList({ onSelectProject }) {
               <h3 className="modal-title">New Production</h3>
               <button className="modal-close" onClick={() => setShowModal(false)}>&times;</button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">Production Name *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  placeholder="e.g., Shards Season 1"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Production Company</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.production_company}
-                  onChange={e => setFormData({ ...formData, production_company: e.target.value })}
-                  placeholder="e.g., ABC Studios"
-                />
-              </div>
-              <div className="form-row">
+            <div className="modal-body">
+              <form onSubmit={handleSubmit}>
                 <div className="form-group">
-                  <label className="form-label">Start Date</label>
+                  <label className="form-label">Production Name *</label>
                   <input
-                    type="date"
+                    type="text"
                     className="form-input"
-                    value={formData.start_date}
-                    onChange={e => setFormData({ ...formData, start_date: e.target.value })}
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    placeholder="e.g., The Shards Season 1"
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">End Date</label>
+                  <label className="form-label">Production Company</label>
                   <input
-                    type="date"
+                    type="text"
                     className="form-input"
-                    value={formData.end_date}
-                    onChange={e => setFormData({ ...formData, end_date: e.target.value })}
+                    value={formData.production_company}
+                    onChange={e => setFormData({ ...formData, production_company: e.target.value })}
+                    placeholder="e.g., ABC Studios"
                   />
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Notes</label>
-                <textarea
-                  className="form-input"
-                  value={formData.notes}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Create Production
-                </button>
-              </div>
-            </form>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Start Date</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={formData.start_date}
+                      onChange={e => setFormData({ ...formData, start_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">End Date</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={formData.end_date}
+                      onChange={e => setFormData({ ...formData, end_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Notes</label>
+                  <textarea
+                    className="form-input"
+                    value={formData.notes}
+                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
+                    placeholder="Optional notes about this production..."
+                  />
+                </div>
+                <div className="modal-footer" style={{ margin: '0 -1.5rem -1.5rem', padding: '1rem 1.5rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Create Production
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

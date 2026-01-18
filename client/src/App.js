@@ -12,13 +12,15 @@ function App() {
       <header className="header">
         <h1>
           <Link to="/" style={{ color: 'white', textDecoration: 'none' }}>
-            Location Cost Tracker
+            Location Manager
           </Link>
         </h1>
         {currentProject && (
-          <div style={{ fontSize: '0.875rem', color: 'var(--gray-400)' }}>
-            {currentProject.name}
-          </div>
+          <nav>
+            <Link to={`/project/${currentProject.id}`} className="active">
+              {currentProject.name}
+            </Link>
+          </nav>
         )}
       </header>
 
