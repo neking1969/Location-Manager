@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 function ProjectList({ onSelectProject }) {
   const [projects, setProjects] = useState([]);
@@ -21,7 +21,7 @@ function ProjectList({ onSelectProject }) {
 
   const fetchProjects = async () => {
     try {
-      const response = await axios.get('/api/projects');
+      const response = await api.get('/api/projects');
       setProjects(response.data);
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -33,7 +33,7 @@ function ProjectList({ onSelectProject }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('/api/projects', formData);
+      const response = await api.post('/api/projects', formData);
       setProjects([response.data, ...projects]);
       setShowModal(false);
       setFormData({
@@ -61,7 +61,7 @@ function ProjectList({ onSelectProject }) {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this production? All data will be lost.')) {
       try {
-        await axios.delete(`/api/projects/${projectId}`);
+        await api.delete(`/api/projects/${projectId}`);
         setProjects(projects.filter(p => p.id !== projectId));
       } catch (error) {
         console.error('Error deleting project:', error);

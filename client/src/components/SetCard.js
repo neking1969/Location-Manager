@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
 
@@ -52,7 +52,7 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
   const fetchCostEntries = async () => {
     setLoadingEntries(true);
     try {
-      const response = await axios.get(`/api/costs/set/${set.id}`);
+      const response = await api.get(`/api/costs/set/${set.id}`);
       setCostEntries(response.data);
     } catch (error) {
       console.error('Error fetching cost entries:', error);
@@ -108,9 +108,9 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
       };
 
       if (editingCost) {
-        await axios.put(`/api/costs/${editingCost.id}`, payload);
+        await api.put(`/api/costs/${editingCost.id}`, payload);
       } else {
-        await axios.post('/api/costs', payload);
+        await api.post('/api/costs', payload);
       }
 
       setShowCostModal(false);
@@ -124,7 +124,7 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
   const handleDeleteCost = async (costId) => {
     if (window.confirm('Delete this cost entry?')) {
       try {
-        await axios.delete(`/api/costs/${costId}`);
+        await api.delete(`/api/costs/${costId}`);
         fetchCostEntries();
         onRefresh();
       } catch (error) {

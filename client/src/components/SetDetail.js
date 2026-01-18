@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 function SetDetail() {
   const { setId } = useParams();
@@ -10,7 +10,7 @@ function SetDetail() {
 
   const fetchSetData = useCallback(async () => {
     try {
-      const response = await axios.get(`/api/reports/set/${setId}`);
+      const response = await api.get(`/api/reports/set/${setId}`);
       setSetData(response.data);
     } catch (error) {
       console.error('Error fetching set:', error);

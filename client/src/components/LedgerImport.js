@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 function LedgerImport({ projectId, onClose, onImportComplete }) {
   const [file, setFile] = useState(null);
@@ -27,7 +27,7 @@ function LedgerImport({ projectId, onClose, onImportComplete }) {
     formData.append('file', file);
 
     try {
-      const response = await axios.post(`/api/upload/ledger/${projectId}`, formData, {
+      const response = await api.post(`/api/upload/ledger/${projectId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setParseResult(response.data);
@@ -45,7 +45,7 @@ function LedgerImport({ projectId, onClose, onImportComplete }) {
     setError(null);
 
     try {
-      const response = await axios.post(`/api/upload/ledger/import/${parseResult.file_id}`, {
+      const response = await api.post(`/api/upload/ledger/import/${parseResult.file_id}`, {
         projectId
       });
 
