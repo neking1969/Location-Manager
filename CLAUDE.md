@@ -3,7 +3,19 @@
 ## What This App Does
 TV production location cost tracker - compares actual costs vs budgets for filming locations.
 
-## Quick Start (for testing locally)
+## Quick Start - Run Tests (Recommended)
+```bash
+cd server && npm test
+```
+This runs 35 automated tests covering:
+- All API endpoints (projects, episodes, sets, costs, reports)
+- Budget/actual calculations
+- Variance calculations
+- Edge cases (refunds, decimals, empty data)
+
+No servers need to be started - tests use supertest which tests the Express app directly.
+
+## Quick Start - Local Development (Optional)
 ```bash
 cd server && npm start &
 cd client && npm start
