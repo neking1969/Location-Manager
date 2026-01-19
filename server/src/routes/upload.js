@@ -58,18 +58,25 @@ function isLedgerFormat(text) {
          /Acct:\s*\d{4}/.test(text);
 }
 
-// Parse production ledger PDF
+// Parse production ledger PDF - handles GL 505 column-based format
 function parseLedgerPDF(text) {
   const entries = [];
   const lines = text.split('\n');
 
   let currentAccount = null;
   let currentAccountName = null;
+  let isColumnFormat = false;
+
+  // Detect if this is the newer column-based GL 505 format
+  // Look for "General Ledger List By Account" header
+  if (text.includes('General Ledger List By Account') || text.includes('Eff. Date')) {
+    isColumnFormat = true;
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect account header (e.g., "Acct: 6304 - LOCATION SECURITY")
+    // Detect account header (e.g., "Acct: 6304 - LOCATION SECURITY" or "Acct: 6305 - LOCATION POLICE")
     const accountMatch = line.match(/Acct:\s*(\d{4})\s*-\s*(.+)/);
     if (accountMatch) {
       currentAccount = accountMatch[1];
@@ -77,18 +84,21 @@ function parseLedgerPDF(text) {
       continue;
     }
 
-    // Skip header rows and empty lines
-    if (!currentAccount || !line || line.startsWith('Account') || line.startsWith('GL 505')) {
+    // Skip header rows, column headers, and empty lines
+    if (!currentAccount || !line ||
+        line.startsWith('Account') ||
+        line.startsWith('GL 505') ||
+        line.includes('Tax Code') ||
+        line.includes('Transfer Code') ||
+        line.includes('Vendor Name')) {
       continue;
     }
 
-    // Try to parse a data row
-    // Format: Account LO EPI SET ... Description Vendor Trans# TT ... Amount
-    // The amount is typically at the end, and episode is near the start
-
     // Look for lines that start with the account code
     if (line.startsWith(currentAccount)) {
-      const entry = parseLedgerLine(line, currentAccount, currentAccountName);
+      const entry = isColumnFormat
+        ? parseColumnBasedLine(line, currentAccount, currentAccountName)
+        : parseLedgerLine(line, currentAccount, currentAccountName);
       if (entry) {
         entries.push(entry);
       }
@@ -96,6 +106,92 @@ function parseLedgerPDF(text) {
   }
 
   return entries;
+}
+
+// Parse GL 505 column-based format (Disney/Fox style)
+// Format: Account LO EPI SET WC WS ... Description Vendor Trans# ... Eff.Date ... Amount
+function parseColumnBasedLine(line, accountCode, accountName) {
+  // Split by multiple spaces to get column chunks
+  const parts = line.split(/\s{2,}/).filter(p => p.trim());
+
+  if (parts.length < 4) return null;
+
+  // Extract amount (last number with decimals)
+  const amountMatch = line.match(/-?[\d,]+\.\d{2}$/);
+  if (!amountMatch) return null;
+
+  const amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+  if (isNaN(amount) || amount === 0) return null;
+
+  // Extract episode from near the start (format: "6305 01 101" = Account LO EPI)
+  // Episode is typically 3 digits like 101, 102, etc.
+  const startMatch = line.match(/^\d{4}\s+\d{1,2}\s+(\d{3})/);
+  const episode = startMatch ? startMatch[1] : null;
+
+  // Extract effective date (MM/DD/YYYY format near end)
+  const effDateMatch = line.match(/(\d{2}\/\d{2}\/\d{4})/);
+  const date = effDateMatch ? normalizeDate(effDateMatch[1]) : null;
+
+  // Extract description - typically in format "MM/DD/YY : NAME : TYPE" or "DATE : DESCRIPTION"
+  // Look for the description pattern between early columns and vendor
+  let description = '';
+  let personName = '';
+  let payType = '';
+
+  // Pattern for police/security officer entries: "10/25/25 : ALBIN, W : REGULAR 1X"
+  const officerMatch = line.match(/(\d{2}\/\d{2}\/\d{2})\s*:\s*([A-Z]+,\s*[A-Z])\s*:\s*([A-Z0-9\s\.]+?)(?=\s{2,})/i);
+  if (officerMatch) {
+    const workDate = officerMatch[1];
+    personName = officerMatch[2].trim();
+    payType = officerMatch[3].trim();
+    description = `${workDate} - ${personName} - ${payType}`;
+  } else {
+    // Fallback: look for any descriptive text
+    const descMatch = line.match(/(?:QW|QE|USA)\s+(.+?)(?=\s{2,}[A-Z]{3,})/);
+    if (descMatch) {
+      description = descMatch[1].trim();
+    }
+  }
+
+  // Extract vendor name (usually all caps, before transaction numbers)
+  let vendor = '';
+  const vendorMatch = line.match(/([A-Z][A-Z\s&\.]+(?:PARTNERS|SECURITY|INC|LLC|SERVICES?|ENTERTAINMENT))\s+\d/);
+  if (vendorMatch) {
+    vendor = vendorMatch[1].trim();
+  }
+
+  // Determine category from account code
+  let category = ACCOUNT_CODE_MAP[accountCode] || 'Loc Fees';
+
+  // For 6342 entries, subcategorize based on description
+  if (accountCode === '6342') {
+    category = subcategorize6342(description);
+  }
+
+  // Location from account name or default to General
+  const location = extractLocationFromAccountName(accountName);
+
+  return {
+    account_code: accountCode,
+    account_name: accountName,
+    episode,
+    location,
+    category,
+    description: description || `${accountName} charge`,
+    vendor,
+    person_name: personName,
+    pay_type: payType,
+    amount,
+    date,
+    raw_line: line
+  };
+}
+
+// Extract location hint from account name
+function extractLocationFromAccountName(accountName) {
+  // Account names like "LOCATION POLICE", "LOCATION SECURITY" don't have specific location
+  // Return a generic location that can be overridden
+  return 'General';
 }
 
 // Parse a single ledger line

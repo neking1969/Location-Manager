@@ -167,6 +167,7 @@ function LedgerImport({ projectId, onClose, onImportComplete }) {
                         <th style={{ padding: '0.5rem', textAlign: 'left' }}>Episode</th>
                         <th style={{ padding: '0.5rem', textAlign: 'left' }}>Location</th>
                         <th style={{ padding: '0.5rem', textAlign: 'right' }}>Entries</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'right' }}>Loc Fees</th>
                         <th style={{ padding: '0.5rem', textAlign: 'right' }}>Security</th>
                         <th style={{ padding: '0.5rem', textAlign: 'right' }}>Police</th>
                         <th style={{ padding: '0.5rem', textAlign: 'right' }}>Fire</th>
@@ -183,6 +184,7 @@ function LedgerImport({ projectId, onClose, onImportComplete }) {
                             <td style={{ padding: '0.5rem' }}>{group.episode || 'Unknown'}</td>
                             <td style={{ padding: '0.5rem' }}>{group.location || 'General'}</td>
                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>{group.entries?.length || 0}</td>
+                            <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(group.totals?.['Loc Fees'])}</td>
                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(group.totals?.Security)}</td>
                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(group.totals?.Police)}</td>
                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(group.totals?.Fire)}</td>
