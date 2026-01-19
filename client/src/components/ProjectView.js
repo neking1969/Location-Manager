@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import SetCard from './SetCard';
 import LedgerImport from './LedgerImport';
+import BudgetChart from './BudgetChart';
+import { exportProjectSummary, exportSetsToCSV, exportCategoryComparison } from '../utils/exportCsv';
 
 function ProjectView({ onProjectLoad }) {
   const { projectId } = useParams();
@@ -23,18 +25,22 @@ function ProjectView({ onProjectLoad }) {
   const [editingSet, setEditingSet] = useState(null);
   const [summary, setSummary] = useState(null);
   const [showLedgerImport, setShowLedgerImport] = useState(false);
+  const [showChart, setShowChart] = useState(false);
+  const [allSets, setAllSets] = useState([]);
 
   const fetchProjectData = useCallback(async () => {
     try {
-      const [projectRes, episodesRes, summaryRes] = await Promise.all([
+      const [projectRes, episodesRes, summaryRes, allSetsRes] = await Promise.all([
         api.get(`/api/projects/${projectId}`),
         api.get(`/api/episodes/project/${projectId}`),
-        api.get(`/api/reports/dashboard/${projectId}`)
+        api.get(`/api/reports/dashboard/${projectId}`),
+        api.get(`/api/sets/project/${projectId}`)
       ]);
 
       setProject(projectRes.data);
       setEpisodes(episodesRes.data);
       setSummary(summaryRes.data.summary);
+      setAllSets(allSetsRes.data);
 
       if (onProjectLoad) {
         onProjectLoad(projectRes.data);
@@ -205,7 +211,89 @@ function ProjectView({ onProjectLoad }) {
               <p style={{ color: 'var(--gray-500)' }}>{project.production_company}</p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className={`btn ${showChart ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setShowChart(!showChart)}
+            >
+              {showChart ? 'Hide Chart' : 'Show Chart'}
+            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={(e) => {
+                  const menu = e.currentTarget.nextElementSibling;
+                  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                }}
+              >
+                Export CSV
+              </button>
+              <div style={{
+                display: 'none',
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                background: 'white',
+                border: '1px solid var(--gray-200)',
+                borderRadius: '4px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                zIndex: 100,
+                minWidth: '180px'
+              }}>
+                <button
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                  onClick={() => exportProjectSummary(project, episodes, summary)}
+                  onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
+                  onMouseOut={(e) => e.target.style.background = 'none'}
+                >
+                  Project Summary
+                </button>
+                <button
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                  onClick={() => exportSetsToCSV(allSets, project.name)}
+                  onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
+                  onMouseOut={(e) => e.target.style.background = 'none'}
+                >
+                  All Sets & Budgets
+                </button>
+                <button
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                  onClick={() => exportCategoryComparison(allSets, project.name)}
+                  onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
+                  onMouseOut={(e) => e.target.style.background = 'none'}
+                >
+                  Category Comparison
+                </button>
+              </div>
+            </div>
             <button className="btn btn-primary" onClick={() => setShowLedgerImport(true)}>
               Import Ledger
             </button>
@@ -239,6 +327,14 @@ function ProjectView({ onProjectLoad }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Budget Chart */}
+      {showChart && allSets.length > 0 && (
+        <BudgetChart
+          sets={allSets}
+          title={`${project.name} - Budget vs Actual`}
+        />
       )}
 
       {/* Episode Tabs */}

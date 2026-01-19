@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import api from '../api';
+import { validateCost } from '../utils/validation';
+import { useToast } from '../contexts/ToastContext';
 
 const COST_CATEGORIES = ['Loc Fees', 'Security', 'Fire', 'Rentals', 'Permits', 'Police'];
 
 function SetCard({ set, onEdit, onDelete, onRefresh }) {
+  const { showSuccess, showError } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -17,6 +20,10 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
   const [editingCost, setEditingCost] = useState(null);
   const [costEntries, setCostEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [formErrors, setFormErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const budgetMap = {
     'Loc Fees': set.budget_loc_fees || 0,
@@ -78,6 +85,7 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
       invoice_number: ''
     });
     setEditingCost(null);
+    setFormErrors({});
     setShowCostModal(true);
   };
 
@@ -96,6 +104,21 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
 
   const handleSaveCost = async (e) => {
     e.preventDefault();
+
+    // Validate form
+    const validation = validateCost({
+      ...costForm,
+      category: selectedCategory
+    });
+
+    if (!validation.isValid) {
+      setFormErrors(validation.errors);
+      return;
+    }
+
+    setSaving(true);
+    setFormErrors({});
+
     try {
       const payload = {
         set_id: set.id,
@@ -109,8 +132,10 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
 
       if (editingCost) {
         await api.put(`/api/costs/${editingCost.id}`, payload);
+        showSuccess('Cost entry updated successfully');
       } else {
         await api.post('/api/costs', payload);
+        showSuccess('Cost entry added successfully');
       }
 
       setShowCostModal(false);
@@ -118,6 +143,10 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
       onRefresh();
     } catch (error) {
       console.error('Error saving cost:', error);
+      setFormErrors({ submit: 'Failed to save cost. Please try again.' });
+      showError('Failed to save cost entry');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -127,8 +156,10 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
         await api.delete(`/api/costs/${costId}`);
         fetchCostEntries();
         onRefresh();
+        showSuccess('Cost entry deleted');
       } catch (error) {
         console.error('Error deleting cost:', error);
+        showError('Failed to delete cost entry');
       }
     }
   };
@@ -136,6 +167,31 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
   const getCategoryEntries = (category) => {
     return costEntries.filter(e => e.category === category);
   };
+
+  // Filter entries based on search term and category
+  const getFilteredEntries = () => {
+    let filtered = costEntries;
+
+    // Filter by category
+    if (filterCategory !== 'all') {
+      filtered = filtered.filter(e => e.category === filterCategory);
+    }
+
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(e =>
+        (e.description && e.description.toLowerCase().includes(term)) ||
+        (e.vendor && e.vendor.toLowerCase().includes(term)) ||
+        (e.invoice_number && e.invoice_number.toLowerCase().includes(term)) ||
+        (e.category && e.category.toLowerCase().includes(term))
+      );
+    }
+
+    return filtered;
+  };
+
+  const filteredEntries = expanded ? getFilteredEntries() : [];
 
   return (
     <div style={{
@@ -283,55 +339,187 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
           ) : costEntries.length === 0 ? (
             <p style={{ color: 'var(--gray-500)', textAlign: 'center' }}>No cost entries yet</p>
           ) : (
-            COST_CATEGORIES.map(category => {
-              const entries = getCategoryEntries(category);
-              if (entries.length === 0) return null;
-
-              return (
-                <div key={category} style={{ marginBottom: '1rem' }}>
-                  <h5 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--gray-700)' }}>
-                    {category} ({entries.length})
-                  </h5>
-                  <table style={{ width: '100%', fontSize: '0.875rem' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--gray-100)' }}>
-                        <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Date</th>
-                        <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Description</th>
-                        <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Vendor</th>
-                        <th style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>Amount</th>
-                        <th style={{ padding: '0.25rem 0.5rem', width: '80px' }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {entries.map(entry => (
-                        <tr key={entry.id}>
-                          <td style={{ padding: '0.25rem 0.5rem' }}>{entry.date || '-'}</td>
-                          <td style={{ padding: '0.25rem 0.5rem' }}>{entry.description || '-'}</td>
-                          <td style={{ padding: '0.25rem 0.5rem' }}>{entry.vendor || '-'}</td>
-                          <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
-                            {formatCurrency(entry.amount)}
-                          </td>
-                          <td style={{ padding: '0.25rem 0.5rem' }}>
-                            <button
-                              onClick={() => handleEditCost(entry)}
-                              style={{ marginRight: '0.25rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCost(entry.id)}
-                              style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
-                            >
-                              Del
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <>
+              {/* Search and Filter Controls */}
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--gray-50)',
+                borderRadius: '0.375rem',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ flex: '1', minWidth: '200px' }}>
+                  <input
+                    type="text"
+                    placeholder="Search costs (description, vendor, invoice)..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      border: '1px solid var(--gray-300)',
+                      borderRadius: '0.375rem',
+                      fontSize: '0.875rem'
+                    }}
+                  />
                 </div>
-              );
-            })
+                <div style={{ minWidth: '150px' }}>
+                  <select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      border: '1px solid var(--gray-300)',
+                      borderRadius: '0.375rem',
+                      fontSize: '0.875rem',
+                      background: 'white'
+                    }}
+                  >
+                    <option value="all">All Categories</option>
+                    {COST_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                {(searchTerm || filterCategory !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setFilterCategory('all');
+                    }}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      background: 'var(--gray-200)',
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    Clear Filters
+                  </button>
+                )}
+                <span style={{
+                  padding: '0.5rem',
+                  color: 'var(--gray-500)',
+                  fontSize: '0.875rem'
+                }}>
+                  {filteredEntries.length} of {costEntries.length} entries
+                </span>
+              </div>
+
+              {/* Filtered Results */}
+              {filteredEntries.length === 0 ? (
+                <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '1rem' }}>
+                  No entries match your search
+                </p>
+              ) : filterCategory !== 'all' || searchTerm ? (
+                // Show flat list when filtering
+                <table style={{ width: '100%', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--gray-100)' }}>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>Category</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>Description</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>Vendor</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'right' }}>Amount</th>
+                      <th style={{ padding: '0.5rem', width: '80px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEntries.map(entry => (
+                      <tr key={entry.id} style={{ borderBottom: '1px solid var(--gray-100)' }}>
+                        <td style={{ padding: '0.5rem' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '0.125rem 0.5rem',
+                            background: 'var(--gray-100)',
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem'
+                          }}>
+                            {entry.category}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.5rem' }}>{entry.date || '-'}</td>
+                        <td style={{ padding: '0.5rem' }}>{entry.description || '-'}</td>
+                        <td style={{ padding: '0.5rem' }}>{entry.vendor || '-'}</td>
+                        <td style={{ padding: '0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                          {formatCurrency(entry.amount)}
+                        </td>
+                        <td style={{ padding: '0.5rem' }}>
+                          <button
+                            onClick={() => handleEditCost(entry)}
+                            style={{ marginRight: '0.25rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCost(entry.id)}
+                            style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                          >
+                            Del
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                // Show grouped by category when not filtering
+                COST_CATEGORIES.map(category => {
+                  const entries = getCategoryEntries(category);
+                  if (entries.length === 0) return null;
+
+                  return (
+                    <div key={category} style={{ marginBottom: '1rem' }}>
+                      <h5 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--gray-700)' }}>
+                        {category} ({entries.length})
+                      </h5>
+                      <table style={{ width: '100%', fontSize: '0.875rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--gray-100)' }}>
+                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Date</th>
+                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Description</th>
+                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Vendor</th>
+                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '0.25rem 0.5rem', width: '80px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.map(entry => (
+                            <tr key={entry.id}>
+                              <td style={{ padding: '0.25rem 0.5rem' }}>{entry.date || '-'}</td>
+                              <td style={{ padding: '0.25rem 0.5rem' }}>{entry.description || '-'}</td>
+                              <td style={{ padding: '0.25rem 0.5rem' }}>{entry.vendor || '-'}</td>
+                              <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                                {formatCurrency(entry.amount)}
+                              </td>
+                              <td style={{ padding: '0.25rem 0.5rem' }}>
+                                <button
+                                  onClick={() => handleEditCost(entry)}
+                                  style={{ marginRight: '0.25rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCost(entry.id)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                                >
+                                  Del
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })
+              )}
+            </>
           )}
         </div>
       )}
@@ -347,29 +535,55 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
               <button className="modal-close" onClick={() => setShowCostModal(false)}>&times;</button>
             </div>
             <form onSubmit={handleSaveCost}>
+              {formErrors.submit && (
+                <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                  {formErrors.submit}
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label">Amount *</label>
                 <input
                   type="number"
                   className="form-input"
+                  style={formErrors.amount ? { borderColor: 'var(--danger)' } : {}}
                   value={costForm.amount}
-                  onChange={e => setCostForm({ ...costForm, amount: e.target.value })}
-                  required
+                  onChange={e => {
+                    setCostForm({ ...costForm, amount: e.target.value });
+                    if (formErrors.amount) {
+                      setFormErrors({ ...formErrors, amount: null });
+                    }
+                  }}
                   min="0"
                   step="0.01"
                   placeholder="0.00"
                   autoFocus
                 />
+                {formErrors.amount && (
+                  <p style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                    {formErrors.amount}
+                  </p>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Description</label>
                 <input
                   type="text"
                   className="form-input"
+                  style={formErrors.description ? { borderColor: 'var(--danger)' } : {}}
                   value={costForm.description}
-                  onChange={e => setCostForm({ ...costForm, description: e.target.value })}
+                  onChange={e => {
+                    setCostForm({ ...costForm, description: e.target.value });
+                    if (formErrors.description) {
+                      setFormErrors({ ...formErrors, description: null });
+                    }
+                  }}
                   placeholder="e.g., Daily security guard"
                 />
+                {formErrors.description && (
+                  <p style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                    {formErrors.description}
+                  </p>
+                )}
               </div>
               <div className="form-row">
                 <div className="form-group">
@@ -377,10 +591,21 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
                   <input
                     type="text"
                     className="form-input"
+                    style={formErrors.vendor ? { borderColor: 'var(--danger)' } : {}}
                     value={costForm.vendor}
-                    onChange={e => setCostForm({ ...costForm, vendor: e.target.value })}
+                    onChange={e => {
+                      setCostForm({ ...costForm, vendor: e.target.value });
+                      if (formErrors.vendor) {
+                        setFormErrors({ ...formErrors, vendor: null });
+                      }
+                    }}
                     placeholder="e.g., ABC Security"
                   />
+                  {formErrors.vendor && (
+                    <p style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                      {formErrors.vendor}
+                    </p>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Date</label>
@@ -405,8 +630,8 @@ function SetCard({ set, onEdit, onDelete, onRefresh }) {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCostModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingCost ? 'Update' : 'Add'} Cost
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : (editingCost ? 'Update' : 'Add')} Cost
                 </button>
               </div>
             </form>
