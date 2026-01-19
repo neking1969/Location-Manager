@@ -1,0 +1,69 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1745 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 750 Tm
+(GL 505 General Ledger) Tj
+1 0 0 1 50 738 Tm
+(Production Location Costs Report) Tj
+1 0 0 1 50 714 Tm
+(Acct: 6304 - LOCATION SECURITY) Tj
+1 0 0 1 50 702 Tm
+(6304     QE  101  A01  01/15-01/16 SECURITY:LATCHFORD HOUSE     APEX SECURITY INC        123456  2,500.00) Tj
+1 0 0 1 50 690 Tm
+(6304     QE  101  A02  01/17-01/18 SECURITY:DOWNTOWN LOFT       APEX SECURITY INC        123457  1,800.00) Tj
+1 0 0 1 50 678 Tm
+(6304     QE  102  B01  01/20-01/21 SECURITY:BUCKLEY GYM         SECURE PARTNERS LLC      123458  3,200.00) Tj
+1 0 0 1 50 654 Tm
+(Acct: 6305 - LOCATION POLICE) Tj
+1 0 0 1 50 642 Tm
+(6305     QE  101  A01  01/15-01/16 POLICE:LATCHFORD HOUSE       LAPD OFF-DUTY            223456  1,200.00) Tj
+1 0 0 1 50 630 Tm
+(6305     QE  102  B01  01/20-01/21 POLICE:BUCKLEY GYM           LAPD OFF-DUTY            223457  1,500.00) Tj
+1 0 0 1 50 606 Tm
+(Acct: 6307 - LOCATION FIREMAN) Tj
+1 0 0 1 50 594 Tm
+(6307     QE  101  A01  01/15-01/16 FIRE:LATCHFORD HOUSE         LAFD FIRE WATCH          323456    800.00) Tj
+1 0 0 1 50 582 Tm
+(6307     QE  102  B01  01/20-01/21 FIRE:BUCKLEY GYM             LAFD FIRE WATCH          323457    950.00) Tj
+1 0 0 1 50 558 Tm
+(Acct: 6342 - FEES & PERMITS) Tj
+1 0 0 1 50 546 Tm
+(6342     QE  101  A01  01/15-01/16 PERMIT:LATCHFORD HOUSE       FILM LA                  423456    350.00) Tj
+1 0 0 1 50 534 Tm
+(6342     QE  101  A01  01/15-01/16 TENTS:LATCHFORD HOUSE        PARTY RENTAL INC         423457  1,500.00) Tj
+1 0 0 1 50 522 Tm
+(6342     QE  102  B01  01/20-01/21 PERMIT:BUCKLEY GYM           FILM LA                  423458    275.00) Tj
+1 0 0 1 50 510 Tm
+(6342     QE  102  B01  01/20-01/21 GENERATOR:BUCKLEY GYM        POWER SOLUTIONS          423459  2,100.00) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000002044 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2112
+%%EOF

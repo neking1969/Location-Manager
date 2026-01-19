@@ -134,11 +134,37 @@ function parseLedgerLine(line, accountCode, accountName) {
     }
   }
 
-  // Extract vendor name (usually in caps, before the transaction number)
+  // Extract vendor name (in caps, between description and transaction number)
+  // Format: "...DESCRIPTION     VENDOR NAME     123456  1,234.56"
   let vendor = '';
-  const vendorMatch = line.match(/([A-Z][A-Z\s&\.]+(?:INC|LLC|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVIC)?\w*)\s+\d{3,}/);
+  // Look for vendor with common suffixes right before the transaction number
+  const vendorMatch = line.match(/([A-Z][A-Z\s&\.\-]*(INC|LLC|LTD|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVICES?|RENTAL|SOLUTIONS?|WATCH|OFF-DUTY))\s+\d{5,}/i);
   if (vendorMatch) {
     vendor = vendorMatch[1].trim();
+    // Clean up: remove location prefix if accidentally captured
+    vendor = vendor.replace(/^[A-Z\s]+(INC|LLC|LTD|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVICES?|RENTAL|SOLUTIONS?|WATCH|OFF-DUTY)$/i, (match, suffix) => {
+      // Keep only the last company name before the suffix
+      const words = match.trim().split(/\s+/);
+      const suffixIdx = words.findIndex(w => w.match(/^(INC|LLC|LTD|PARTNERS|SECURITY|PRODUCTION|STUDIO|SERVICES?|RENTAL|SOLUTIONS?|WATCH|OFF-DUTY)$/i));
+      if (suffixIdx > 1) {
+        // Keep 2-3 words before suffix
+        return words.slice(Math.max(0, suffixIdx - 3), suffixIdx + 1).join(' ');
+      }
+      return match;
+    });
+  } else {
+    // Fallback: split by multiple spaces and look for vendor-like text
+    const parts = line.split(/\s{2,}/);
+    // Vendor is typically the part right before the transaction number (5+ digits)
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]?.trim();
+      const nextPart = parts[i + 1]?.trim();
+      // Check if next part is a number (transaction number) and current looks like vendor
+      if (nextPart && /^\d{5,}/.test(nextPart) && part && /^[A-Z][A-Z\s&\.\-]+$/.test(part) && part.length > 3) {
+        vendor = part;
+        break;
+      }
+    }
   }
 
   // Extract location from description
