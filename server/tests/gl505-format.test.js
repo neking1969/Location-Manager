@@ -5,36 +5,42 @@
 
 const { resetDatabase } = require('./setup');
 
-// Sample GL 505 format text (realistic example)
+// Sample GL 505 format text - ACTUAL Disney format from user's screenshot
+// "General Ledger List By Account: Detail" format
 const SAMPLE_GL505_TEXT = `
-Disney Television Studios
-General Ledger Detail Report
-GL 505 Production: Test Show
-Period: 01/01/2024 - 01/31/2024
-
-Acct: 6304 - LOCATION SECURITY
-Account LO EPI SET S S S C S C S Description                    Vendor                Trans#  TT Date       Amount
-6304    QE 101 DOWNTOWN  CA QE QE 01/05-01/06 SECURITY          ABC SECURITY INC      12345   AP 01/15/2024  2,500.00
-6304    QE 101 DOWNTOWN  CA QE QE 01/07-01/08 SECURITY          ABC SECURITY INC      12346   AP 01/15/2024  2,750.00
-6304    QE 102 PARK      CA QE QE 01/10-01/11 SECURITY          XYZ GUARDS LLC        12400   AP 01/20/2024  1,800.00
-6304    QE 102 WAREHOUSE CA QE QE 01/12-01/13 SECURITY          XYZ GUARDS LLC        12401   AP 01/20/2024  2,100.00
+The Shards - Season 1
+Twentieth Century Fox Film Corp
+Disney
+General Ledger List By Account: Detail
 
 Acct: 6305 - LOCATION POLICE
-Account LO EPI SET S S S C S C S Description                    Vendor                Trans#  TT Date       Amount
-6305    QE 101 DOWNTOWN  CA QE QE 01/05-01/06 POLICE DETAIL     LAPD OFF DUTY         22100   AP 01/16/2024  1,500.00
-6305    QE 102 PARK      CA QE QE 01/10-01/11 POLICE DETAIL     LAPD OFF DUTY         22101   AP 01/21/2024  1,200.00
+Account LO EPI SET WC WS F1 F2 F3 F4 IN Tax Transfer Description                         Vendor Name              Trans# TT JS Cur Period PO Number Document # Eff. Date PaymentNumber Amount
+6305    01 101         QW              10/25/25 : ALBIN, W : REGULAR 1X                  ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              619.20
+6305    01 101         QW              10/25/25 : ALBIN, W : OVERTIME 1.5X               ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              348.30
+6305    01 101         QW              10/25/25 : ALBIN, W : MEAL PENALTY NON UNION      ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              77.40
+6305    01 101         QW              10/25/25 : BOYD, R : REGULAR 1X                   ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              619.20
+6305    01 101         QW              10/25/25 : BOYD, R : OVERTIME 1.5X                ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              464.40
+6305    01 101         QW              10/25/25 : BOYD, R : DOUBLE TIME 2X               ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              309.60
+6305    01 102         QW              10/25/25 : CELIS, F : REGULAR 1X                  ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              1,238.40
+6305    01 102         QW              10/25/25 : CELIS, F : OVERTIME 1.5X               ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              464.40
+6305    01 103         QW              10/25/25 : CHAPMAN, M : REGULAR 1X                ENTERTAINMENT PARTNERS   1449   PR PR USD 8      10J400    10/25/2025              1,238.40
+
+Acct: 6304 - LOCATION SECURITY
+Account LO EPI SET WC WS F1 F2 F3 F4 IN Tax Transfer Description                         Vendor Name              Trans# TT JS Cur Period PO Number Document # Eff. Date PaymentNumber Amount
+6304    01 101         QW              10/20/25 : MAIN GATE SECURITY                     UNIVERSAL PROTECTION     5567   AP PR USD 8      10J400    10/20/2025              2,500.00
+6304    01 101         QW              10/21/25 : NIGHT WATCH DETAIL                     UNIVERSAL PROTECTION     5568   AP PR USD 8      10J400    10/21/2025              1,800.00
+6304    01 102         QW              10/22/25 : SET SECURITY                           UNIVERSAL PROTECTION     5569   AP PR USD 8      10J400    10/22/2025              2,200.00
 
 Acct: 6307 - LOCATION FIREMAN
-Account LO EPI SET S S S C S C S Description                    Vendor                Trans#  TT Date       Amount
-6307    QE 101 DOWNTOWN  CA QE QE 01/05-01/06 FIRE WATCH        LAFD SERVICES         33200   AP 01/16/2024    800.00
-6307    QE 102 WAREHOUSE CA QE QE 01/12-01/13 FIRE WATCH        LAFD SERVICES         33201   AP 01/21/2024    950.00
+Account LO EPI SET WC WS F1 F2 F3 F4 IN Tax Transfer Description                         Vendor Name              Trans# TT JS Cur Period PO Number Document # Eff. Date PaymentNumber Amount
+6307    01 101         QW              10/25/25 : FIRE WATCH ON SET                      LAFD FILM UNIT           7890   AP PR USD 8      10J400    10/25/2025              950.00
+6307    01 102         QW              10/26/25 : STANDBY FIRE SAFETY                    LAFD FILM UNIT           7891   AP PR USD 8      10J400    10/26/2025              850.00
 
 Acct: 6342 - FEES & PERMITS
-Account LO EPI SET S S S C S C S Description                    Vendor                Trans#  TT Date       Amount
-6342    QE 101 DOWNTOWN  CA QE QE FILMING PERMIT                FILM LA               44100   AP 01/10/2024    625.00
-6342    QE 101 DOWNTOWN  CA QE QE TENT RENTAL 20X30            PARTY RENTALS INC     44101   AP 01/12/2024  1,200.00
-6342    QE 102 PARK      CA QE QE FILMING PERMIT                FILM LA               44102   AP 01/15/2024    625.00
-6342    QE 102 PARK      CA QE QE RESTROOM TRAILERS            SANITATION CO         44103   AP 01/18/2024    450.00
+Account LO EPI SET WC WS F1 F2 F3 F4 IN Tax Transfer Description                         Vendor Name              Trans# TT JS Cur Period PO Number Document # Eff. Date PaymentNumber Amount
+6342    01 101         QW              FILMING PERMIT - DOWNTOWN                         FILM LA                  8800   AP PR USD 8      10J400    10/15/2025              625.00
+6342    01 101         QW              TENT RENTAL 20X30                                 CLASSIC PARTY RENTALS    8801   AP PR USD 8      10J400    10/16/2025              1,200.00
+6342    01 102         QW              FILMING PERMIT - STUDIO                           FILM LA                  8802   AP PR USD 8      10J400    10/17/2025              625.00
 `;
 
 // Parsing functions (matching upload.js logic)

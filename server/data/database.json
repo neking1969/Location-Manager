@@ -1,37 +1,37 @@
 {
   "projects": [
     {
-      "id": "6e1aac0c-1ab0-431a-ab41-339cd0e03618",
+      "id": "d913879d-8ba4-4e40-8a42-54a10f70170a",
       "name": "Test Project",
-      "created_at": "2026-01-19T17:26:48.946Z",
-      "updated_at": "2026-01-19T17:26:48.946Z"
+      "created_at": "2026-01-19T17:30:47.022Z",
+      "updated_at": "2026-01-19T17:30:47.022Z"
     }
   ],
   "episodes": [
     {
-      "id": "968cd91a-4ca1-4bfe-bb01-aca4b176f5e8",
-      "project_id": "6e1aac0c-1ab0-431a-ab41-339cd0e03618",
+      "id": "9242b66c-0932-4955-a7c2-307ce9f8da57",
+      "project_id": "d913879d-8ba4-4e40-8a42-54a10f70170a",
       "name": "Backlot",
       "type": "location_group",
       "sort_order": 0,
-      "created_at": "2026-01-19T17:26:48.946Z",
-      "updated_at": "2026-01-19T17:26:48.946Z"
+      "created_at": "2026-01-19T17:30:47.022Z",
+      "updated_at": "2026-01-19T17:30:47.022Z"
     },
     {
-      "id": "d7f44a90-2365-4f15-ad02-1db04a9d9fc8",
-      "project_id": "6e1aac0c-1ab0-431a-ab41-339cd0e03618",
+      "id": "edf6088f-cbb8-49b5-a2bb-38ccfa72d9ca",
+      "project_id": "d913879d-8ba4-4e40-8a42-54a10f70170a",
       "name": "Amort",
       "type": "amortization",
       "sort_order": 1,
-      "created_at": "2026-01-19T17:26:48.946Z",
-      "updated_at": "2026-01-19T17:26:48.946Z"
+      "created_at": "2026-01-19T17:30:47.022Z",
+      "updated_at": "2026-01-19T17:30:47.022Z"
     }
   ],
   "sets": [
     {
-      "id": "19a4352a-3764-4faa-ac13-8f6dffc0617c",
-      "project_id": "6e1aac0c-1ab0-431a-ab41-339cd0e03618",
-      "episode_id": "968cd91a-4ca1-4bfe-bb01-aca4b176f5e8",
+      "id": "ec20ec2e-17fb-42d9-a5e2-6c3e5fbdedd8",
+      "project_id": "d913879d-8ba4-4e40-8a42-54a10f70170a",
+      "episode_id": "9242b66c-0932-4955-a7c2-307ce9f8da57",
       "set_name": "Test Set",
       "budget_loc_fees": 5000,
       "budget_security": 2000,
@@ -39,19 +39,19 @@
       "budget_rentals": 0,
       "budget_permits": 0,
       "budget_police": 0,
-      "created_at": "2026-01-19T17:26:48.957Z",
-      "updated_at": "2026-01-19T17:26:48.957Z"
+      "created_at": "2026-01-19T17:30:47.027Z",
+      "updated_at": "2026-01-19T17:30:47.027Z"
     }
   ],
   "cost_entries": [
     {
-      "id": "364be80c-3fdf-4034-a740-81af59ddc1b4",
-      "set_id": "19a4352a-3764-4faa-ac13-8f6dffc0617c",
+      "id": "e65d9a4b-0b93-4db9-bc7a-413e0810b7d8",
+      "set_id": "ec20ec2e-17fb-42d9-a5e2-6c3e5fbdedd8",
       "category": "Loc Fees",
       "amount": 1500,
       "payment_status": "pending",
-      "created_at": "2026-01-19T17:26:48.968Z",
-      "updated_at": "2026-01-19T17:26:48.968Z"
+      "created_at": "2026-01-19T17:30:47.030Z",
+      "updated_at": "2026-01-19T17:30:47.030Z"
     }
   ],
   "uploaded_files": []
