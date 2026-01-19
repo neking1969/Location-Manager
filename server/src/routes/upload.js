@@ -70,9 +70,26 @@ function getFileBuffer(file) {
 
 // Detect if PDF is a production ledger format
 function isLedgerFormat(text) {
-  return text.includes('General Ledger') ||
-         text.includes('GL 505') ||
-         /Acct:\s*\d{4}/.test(text);
+  const lowerText = text.toLowerCase();
+
+  // Log first 500 chars for debugging
+  console.log('PDF text sample:', text.substring(0, 500));
+
+  const isLedger = lowerText.includes('general ledger') ||
+         lowerText.includes('gl 505') ||
+         lowerText.includes('gl505') ||
+         /acct:?\s*\d{4}/i.test(text) ||
+         /account.*\d{4}/i.test(text) ||
+         lowerText.includes('location police') ||
+         lowerText.includes('location security') ||
+         lowerText.includes('location fire') ||
+         lowerText.includes('twentieth century') ||
+         lowerText.includes('disney') ||
+         lowerText.includes('fox film') ||
+         /630[4-7]/.test(text); // Account codes 6304-6307
+
+  console.log('Is ledger format:', isLedger);
+  return isLedger;
 }
 
 // Parse production ledger PDF - Disney GL 505 format
