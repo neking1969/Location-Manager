@@ -9,10 +9,18 @@ const { getDatabase, findById, findAll, insert, remove, saveDatabase, COST_CATEG
 
 // Account code to category mapping for Disney/Fox production ledgers
 const ACCOUNT_CODE_MAP = {
+  '6302': 'Loc Fees',   // LOCATION FEES
+  '6303': 'Loc Fees',   // LOCATION RENTAL
   '6304': 'Security',   // LOCATION SECURITY
   '6305': 'Police',     // LOCATION POLICE
+  '6306': 'Police',     // LOCATION TRAFFIC CONTROL
   '6307': 'Fire',       // LOCATION FIREMAN
-  '6342': 'Rentals'     // FEES & PERMITS (default, subcategorize by description)
+  '6308': 'Fire',       // LOCATION FIRE SAFETY
+  '6340': 'Permits',    // PERMITS
+  '6341': 'Permits',    // LICENSES
+  '6342': 'Rentals',    // FEES & PERMITS (default, subcategorize by description)
+  '6350': 'Rentals',    // EQUIPMENT RENTAL
+  '6360': 'Rentals'     // MISCELLANEOUS RENTAL
 };
 
 // Keywords to subcategorize 6342 (Fees & Permits) entries
@@ -53,9 +61,21 @@ const upload = multer({
 
 // Detect if PDF is a production ledger format
 function isLedgerFormat(text) {
-  return text.includes('General Ledger') ||
-         text.includes('GL 505') ||
-         /Acct:\s*\d{4}/.test(text);
+  // Check for common ledger indicators
+  const hasLedgerKeyword = text.includes('General Ledger') ||
+                           text.includes('GL 505') ||
+                           text.includes('Ledger Detail') ||
+                           text.includes('Cost Report');
+
+  const hasAccountPattern = /Acct:\s*\d{4}/.test(text) ||
+                            /Account[:\s]+\d{4}/.test(text);
+
+  // Check if text contains lines with known account codes
+  const hasKnownAccounts = Object.keys(ACCOUNT_CODE_MAP).some(code =>
+    new RegExp(`^${code}\\s`, 'm').test(text)
+  );
+
+  return hasLedgerKeyword || hasAccountPattern || hasKnownAccounts;
 }
 
 // Parse production ledger PDF
@@ -69,16 +89,20 @@ function parseLedgerPDF(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect account header (e.g., "Acct: 6304 - LOCATION SECURITY")
-    const accountMatch = line.match(/Acct:\s*(\d{4})\s*-\s*(.+)/);
-    if (accountMatch) {
+    // Detect account header - multiple formats:
+    // "Acct: 6304 - LOCATION SECURITY"
+    // "Account: 6304 LOCATION SECURITY"
+    // "6304 - LOCATION SECURITY" (standalone)
+    // "Account 6304"
+    const accountMatch = line.match(/(?:Acct|Account)?[:\s]*(\d{4})\s*[-:]?\s*([A-Z][A-Z\s&]+)?/i);
+    if (accountMatch && ACCOUNT_CODE_MAP[accountMatch[1]]) {
       currentAccount = accountMatch[1];
-      currentAccountName = accountMatch[2].trim();
+      currentAccountName = accountMatch[2]?.trim() || `Account ${currentAccount}`;
       continue;
     }
 
     // Skip header rows and empty lines
-    if (!currentAccount || !line || line.startsWith('Account') || line.startsWith('GL 505')) {
+    if (!line || line.startsWith('Account') || line.startsWith('GL 505') || line.includes('Page')) {
       continue;
     }
 
@@ -86,11 +110,19 @@ function parseLedgerPDF(text) {
     // Format: Account LO EPI SET ... Description Vendor Trans# TT ... Amount
     // The amount is typically at the end, and episode is near the start
 
-    // Look for lines that start with the account code
-    if (line.startsWith(currentAccount)) {
-      const entry = parseLedgerLine(line, currentAccount, currentAccountName);
-      if (entry) {
-        entries.push(entry);
+    // Look for lines that start with a known account code
+    const lineAccountMatch = line.match(/^(\d{4})/);
+    if (lineAccountMatch) {
+      const lineAccount = lineAccountMatch[1];
+      // If we have a current account context, use it; otherwise try the line's account
+      const accountToUse = currentAccount || (ACCOUNT_CODE_MAP[lineAccount] ? lineAccount : null);
+      const accountNameToUse = currentAccountName || `Account ${lineAccount}`;
+
+      if (accountToUse) {
+        const entry = parseLedgerLine(line, accountToUse, accountNameToUse);
+        if (entry) {
+          entries.push(entry);
+        }
       }
     }
   }
@@ -103,21 +135,29 @@ function parseLedgerLine(line, accountCode, accountName) {
   // Split by multiple spaces to get columns
   const parts = line.split(/\s{2,}/);
 
-  if (parts.length < 5) return null;
+  // More flexible - allow lines with fewer parts if they have an amount
+  if (parts.length < 3) return null;
 
-  // Extract episode number (usually 3 digits like 101, 102, 104)
-  const episodeMatch = line.match(/\b(10[1-9]|1[1-9][0-9])\b/);
+  // Extract episode number (3 digits like 101, 102, 104, etc.)
+  // Also handle 2-digit episode numbers (01, 02) and 4-digit (1001, 1002)
+  const episodeMatch = line.match(/\b(10[0-9]{1,2}|[1-9][0-9]{2}|0[1-9])\b/);
   const episode = episodeMatch ? episodeMatch[1] : null;
 
-  // Extract amount (last number with decimals, possibly negative)
-  const amountMatch = line.match(/-?[\d,]+\.\d{2}$/);
+  // Extract amount - look for number with decimals anywhere in line (more flexible)
+  // First try end of line, then anywhere
+  let amountMatch = line.match(/-?[\d,]+\.\d{2}$/);
+  if (!amountMatch) {
+    // Try to find amount with currency pattern anywhere
+    amountMatch = line.match(/\$?\s*(-?[\d,]+\.\d{2})/);
+  }
   if (!amountMatch) return null;
 
-  const amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+  const amountStr = amountMatch[1] || amountMatch[0];
+  const amount = parseFloat(amountStr.replace(/[$,]/g, ''));
   if (isNaN(amount) || amount === 0) return null;
 
-  // Extract date (MM/DD/YYYY format)
-  const dateMatch = line.match(/(\d{2}\/\d{2}\/\d{4})/);
+  // Extract date - support multiple formats
+  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
   const date = dateMatch ? normalizeDate(dateMatch[1]) : null;
 
   // Extract description - look for text after date patterns that describes the cost
@@ -568,6 +608,76 @@ router.delete('/files/:fileId', (req, res) => {
 // Get cost categories
 router.get('/categories', (req, res) => {
   res.json(COST_CATEGORIES);
+});
+
+// Debug endpoint - analyze PDF without importing
+router.post('/debug/:projectId', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const dataBuffer = fs.readFileSync(req.file.path);
+    const data = await pdfParse(dataBuffer);
+    const text = data.text;
+
+    // Analyze the text
+    const lines = text.split('\n').filter(l => l.trim());
+    const accountHeaders = lines.filter(l => /Acct:\s*\d{4}/.test(l));
+    const linesWithAmounts = lines.filter(l => /-?[\d,]+\.\d{2}$/.test(l.trim()));
+    const linesStartingWith6 = lines.filter(l => /^6[0-9]{3}/.test(l.trim()));
+
+    // Try to parse
+    const entries = parseLedgerPDF(text);
+    const grouped = groupEntries(entries);
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      debug: {
+        total_lines: lines.length,
+        is_ledger_format: isLedgerFormat(text),
+        account_headers_found: accountHeaders,
+        lines_with_amounts: linesWithAmounts.length,
+        lines_starting_with_6xxx: linesStartingWith6.length,
+        sample_lines: lines.slice(0, 30),
+        sample_amount_lines: linesWithAmounts.slice(0, 10)
+      },
+      parsing_result: {
+        entries_found: entries.length,
+        entries: entries.slice(0, 20),
+        grouped: grouped
+      },
+      raw_text_preview: text.substring(0, 3000)
+    });
+  } catch (error) {
+    console.error('Debug parse error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Parse text directly (for testing without PDF)
+router.post('/parse-text', express.text({ limit: '10mb' }), (req, res) => {
+  try {
+    const text = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: 'No text provided' });
+    }
+
+    const entries = parseLedgerPDF(text);
+    const grouped = groupEntries(entries);
+
+    res.json({
+      is_ledger_format: isLedgerFormat(text),
+      entries_found: entries.length,
+      entries,
+      grouped
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;
