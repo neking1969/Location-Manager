@@ -4,9 +4,9 @@ Description: Location Manager API
 
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 60
     Runtime: nodejs18.x
-    MemorySize: 256
+    MemorySize: 512
     Environment:
       Variables:
         TABLE_NAME: !Ref LocationManagerTable

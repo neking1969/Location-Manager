@@ -7,6 +7,9 @@ const { v4: uuidv4 } = require('uuid');
 const pdfParse = require('pdf-parse');
 const { getDatabase, findById, findAll, insert, remove, saveDatabase, COST_CATEGORIES } = require('../database');
 
+// Detect if running in Lambda
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 // Account code to category mapping for Disney/Fox production ledgers
 const ACCOUNT_CODE_MAP = {
   '6304': 'Security',   // LOCATION SECURITY
@@ -22,24 +25,26 @@ const SUBCATEGORY_KEYWORDS = {
   'Loc Fees': ['layout', 'maps', 'survey', 'scout']
 };
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
+// Configure multer - use memory storage for Lambda, disk for local
+const storage = isLambda
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueName = `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+      }
+    });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for large ledgers
+  limits: { fileSize: 6 * 1024 * 1024 }, // 6MB limit for Lambda API Gateway
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['.pdf', '.csv', '.xlsx', '.xls'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -50,6 +55,18 @@ const upload = multer({
     }
   }
 });
+
+// Helper to get file buffer (works in both Lambda and local)
+function getFileBuffer(file) {
+  if (file.buffer) {
+    // Lambda memory storage
+    return file.buffer;
+  } else if (file.path) {
+    // Local disk storage
+    return fs.readFileSync(file.path);
+  }
+  throw new Error('Unable to read file');
+}
 
 // Detect if PDF is a production ledger format
 function isLedgerFormat(text) {
@@ -360,9 +377,13 @@ router.post('/ledger/:projectId', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const dataBuffer = fs.readFileSync(req.file.path);
+    console.log('Processing file:', req.file.originalname, 'Size:', req.file.size);
+
+    const dataBuffer = getFileBuffer(req.file);
     const data = await pdfParse(dataBuffer);
     const text = data.text;
+
+    console.log('Parsed PDF text length:', text.length);
 
     // Check if it's a ledger format
     if (!isLedgerFormat(text)) {
