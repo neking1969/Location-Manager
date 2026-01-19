@@ -402,16 +402,23 @@ router.post('/ledger/:projectId', upload.single('file'), async (req, res) => {
 
     console.log('Parsed PDF text length:', text.length);
 
-    // Check if it's a ledger format
-    if (!isLedgerFormat(text)) {
-      return res.status(400).json({
-        error: 'This does not appear to be a production ledger PDF. Please upload a GL 505 General Ledger report.'
-      });
-    }
+    // Try to detect format (for logging) but don't reject
+    const formatDetected = isLedgerFormat(text);
+    console.log('Format detected as ledger:', formatDetected);
 
+    // Always try to parse - be permissive
     const fileId = uuidv4();
     const entries = parseLedgerPDF(text);
     const grouped = groupEntries(entries);
+
+    // Only reject if we found absolutely nothing
+    if (entries.length === 0) {
+      console.log('No entries parsed. Text sample:', text.substring(0, 1000));
+      return res.status(400).json({
+        error: 'Could not parse any entries from this PDF. Please ensure it is a GL 505 General Ledger report with account codes 6304-6342.',
+        textSample: text.substring(0, 200) // Help debug
+      });
+    }
 
     // Save file record
     insert('uploaded_files', {
