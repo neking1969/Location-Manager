@@ -9,7 +9,9 @@
     "server": "cd server && npm run dev",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
-    "start": "cd server && npm start"
+    "start": "cd server && npm start",
+    "sync": "git pull",
+    "sync:status": "git status"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
