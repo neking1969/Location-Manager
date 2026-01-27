@@ -1,0 +1,37 @@
+{
+  "projects": [
+    {
+      "id": "e8db90af-329a-4cda-8fa0-63650f8fcee2",
+      "name": "The Shards Season 1",
+      "production_company": "20th TV",
+      "start_date": "",
+      "end_date": "",
+      "notes": "",
+      "created_at": "2026-01-17T21:38:28.171Z",
+      "updated_at": "2026-01-17T21:38:28.171Z"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "74659399-6dc2-4b51-aa62-9f207c9d5f11",
+      "project_id": "e8db90af-329a-4cda-8fa0-63650f8fcee2",
+      "name": "Backlot",
+      "type": "location_group",
+      "sort_order": 0,
+      "created_at": "2026-01-17T21:38:28.172Z",
+      "updated_at": "2026-01-17T21:38:28.172Z"
+    },
+    {
+      "id": "32256065-a6a8-4423-b3d2-424f6517436d",
+      "project_id": "e8db90af-329a-4cda-8fa0-63650f8fcee2",
+      "name": "Amort",
+      "type": "amortization",
+      "sort_order": 1,
+      "created_at": "2026-01-17T21:38:28.172Z",
+      "updated_at": "2026-01-17T21:38:28.172Z"
+    }
+  ],
+  "sets": [],
+  "cost_entries": [],
+  "uploaded_files": []
+}
