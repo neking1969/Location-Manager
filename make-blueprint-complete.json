@@ -1,0 +1,564 @@
+{
+    "name": "The Shards: Film Permits with Claude AI Parser",
+    "flow": [
+        {
+            "id": 1,
+            "module": "google-email:executeEmailSearchQuery",
+            "version": 4,
+            "parameters": {
+                "__IMTCONN__": 4586772
+            },
+            "mapper": {
+                "date": {},
+                "size": {
+                    "unit": "M",
+                    "criteria": "larger"
+                },
+                "limit": "10",
+                "folder": "INBOX",
+                "format": "full",
+                "criteria": "unread",
+                "subject": "permit",
+                "filterType": "simpleSearch",
+                "hasAttachment": true,
+                "includeHtmlBody": false
+            },
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "name": "Watch for Permit Emails"
+                },
+                "restore": {
+                    "expect": {
+                        "size": {
+                            "nested": {
+                                "unit": {
+                                    "mode": "chose",
+                                    "label": "MB (megabytes)"
+                                },
+                                "criteria": {
+                                    "mode": "chose",
+                                    "label": "Greater than"
+                                }
+                            }
+                        },
+                        "folder": {
+                            "mode": "chose",
+                            "label": "Inbox"
+                        },
+                        "format": {
+                            "mode": "chose",
+                            "label": "Full content"
+                        },
+                        "criteria": {
+                            "mode": "chose",
+                            "label": "Unread messages"
+                        },
+                        "filterType": {
+                            "mode": "chose",
+                            "label": "Simple filter"
+                        },
+                        "hasAttachment": {
+                            "mode": "chose",
+                            "label": "Yes"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "google-email"
+                            },
+                            "label": "modernlocations@gmail.com"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": 2,
+            "module": "google-email:getAnEmail",
+            "version": 4,
+            "parameters": {
+                "__IMTCONN__": 4586772
+            },
+            "mapper": {
+                "format": "full",
+                "messageId": "{{1.id}}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "name": "Get Full Email"
+                },
+                "restore": {
+                    "expect": {
+                        "format": {
+                            "mode": "chose",
+                            "label": "Full content"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "google-email"
+                            },
+                            "label": "modernlocations@gmail.com"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": 3,
+            "module": "google-email:listEmailAttachments",
+            "version": 4,
+            "parameters": {
+                "__IMTCONN__": 4586772
+            },
+            "mapper": {
+                "include": [
+                    "attachment"
+                ],
+                "messageId": "{{2.id}}",
+                "returnAttachmentData": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 600,
+                    "y": 0,
+                    "name": "Get PDF Attachments"
+                },
+                "restore": {
+                    "expect": {
+                        "include": {
+                            "mode": "chose",
+                            "items": ["attachment"]
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "google-email"
+                            },
+                            "label": "modernlocations@gmail.com"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": 4,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 900,
+                    "y": 0,
+                    "name": "Check if PDF"
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 5,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "ca": "",
+                                "qs": [],
+                                "url": "https://api.anthropic.com/v1/messages",
+                                "gzip": true,
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "x-api-key",
+                                        "value": "YOUR_ANTHROPIC_API_KEY_HERE"
+                                    },
+                                    {
+                                        "name": "anthropic-version",
+                                        "value": "2023-06-01"
+                                    },
+                                    {
+                                        "name": "content-type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "timeout": 300,
+                                "useMtls": false,
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "serializeUrl": false,
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "followRedirect": true,
+                                "useQuerystring": false,
+                                "followAllRedirects": false,
+                                "rejectUnauthorized": true,
+                                "body": "{\n  \"model\": \"claude-3-5-sonnet-20241022\",\n  \"max_tokens\": 2048,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"You are parsing a filming permit for 'The Shards' TV production.\\n\\nExtract permit information and return ONLY valid JSON. If a field is not present, use null or empty string.\\n\\n**Always Extract:**\\n{\\n  \\\"productionTitle\\\": \\\"string\\\",\\n  \\\"permitNumber\\\": \\\"string\\\",\\n  \\\"permitType\\\": \\\"string\\\",\\n  \\\"processingStatus\\\": \\\"string (e.g. Approved, Pending)\\\",\\n  \\\"releaseDate\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"locationManager\\\": \\\"string\\\",\\n  \\\"contactPhone\\\": \\\"string\\\",\\n  \\\"productionOfficeAddress\\\": \\\"string\\\",\\n  \\\"totalFee\\\": \\\"number\\\",\\n  \\\"feeBreakdown\\\": \\\"string\\\",\\n  \\\"invoiceNumber\\\": \\\"string\\\",\\n  \\\"invoiceDate\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"paymentStatus\\\": \\\"string\\\",\\n  \\\"balanceDue\\\": \\\"number\\\",\\n  \\\"locations\\\": [\\n    {\\n      \\\"id\\\": \\\"string\\\",\\n      \\\"address\\\": \\\"string\\\",\\n      \\\"type\\\": \\\"string\\\",\\n      \\\"datesStart\\\": \\\"YYYY-MM-DD\\\",\\n      \\\"datesEnd\\\": \\\"YYYY-MM-DD\\\",\\n      \\\"filmingActivitiesDetails\\\": \\\"string\\\",\\n      \\\"postingDescription\\\": \\\"string\\\",\\n      \\\"closureDescription\\\": \\\"string\\\"\\n    }\\n  ],\\n  \\\"generalTermsConditions\\\": \\\"string\\\"\\n}\\n\\nEmail Subject: {{2.subject}}\\n\\nEmail Body:\\n{{2.fullTextBody}}\\n\\nDo not include any explanation, only return the JSON.\"\n    }\n  ]\n}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": -150,
+                                    "name": "Parse with Claude AI"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "qs": {
+                                            "mode": "chose",
+                                            "items": []
+                                        },
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "POST"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "bodyType": {
+                                            "label": "Raw"
+                                        },
+                                        "contentType": {
+                                            "label": "JSON (application/json)"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 6,
+                            "module": "json:ParseJSON",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "type": "",
+                                "json": "{{5.data.content[0].text}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": -150,
+                                    "name": "Parse Claude Response"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "type": {
+                                            "label": "Choose data structure"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 7,
+                            "module": "google-drive:uploadAFile",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 4586794
+                            },
+                            "mapper": {
+                                "data": "{{3.data}}",
+                                "select": "value",
+                                "convert": false,
+                                "filename": "{{6.permitNumber}} - {{6.locations[0].address}} - {{formatDate(now; \"YYYY-MM-DD\")}}.pdf",
+                                "folderId": "/11W4lj2vC4xCnzCSycIM5sP-H7bYYo6Sv",
+                                "destination": "team",
+                                "sharedDrive": "0AFDniqYMOc8PUk9PVA",
+                                "useDomainAdminAccess": false
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1800,
+                                    "y": -150,
+                                    "name": "Upload to Google Drive"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "select": {
+                                            "label": "Select from the list"
+                                        },
+                                        "folderId": {
+                                            "mode": "chose",
+                                            "path": [
+                                                "Permits"
+                                            ]
+                                        },
+                                        "destination": {
+                                            "label": "Google Shared Drive"
+                                        },
+                                        "sharedDrive": {
+                                            "mode": "chose",
+                                            "label": "DG Locations"
+                                        },
+                                        "useDomainAdminAccess": {
+                                            "label": "No"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            },
+                                            "label": "modernlocations@gmail.com"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 8,
+                            "module": "google-drive:getAFile",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 4024116
+                            },
+                            "mapper": {
+                                "file": "{{7.id}}",
+                                "select": "map",
+                                "formatDrawings": "image/jpeg",
+                                "formatDocuments": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "formatSpreadsheets": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "formatPresentations": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2100,
+                                    "y": -150,
+                                    "name": "Get Drive File Link"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "select": {
+                                            "label": "Enter manually"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            },
+                                            "label": "modernlocations@gmail.com"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 9,
+                            "module": "airtable:ActionCreateRecord",
+                            "version": 3,
+                            "parameters": {
+                                "__IMTCONN__": 4586791
+                            },
+                            "mapper": {
+                                "base": "appY2qj52CCh0fESZ",
+                                "table": "tblsGeGlKnZK2NPaX",
+                                "record": {
+                                    "fldnIGfDCRgUniXvj": "{{6.permitNumber}}",
+                                    "fld8mAAInACYKnWio": "Production: {{6.productionTitle}}\\n\\nLocations:\\n{{join(map(6.locations; \"- \" + address + \" (\" + datesStart + \" to \" + datesEnd + \")\"); \"\\n\")}}\\n\\nTerms: {{6.generalTermsConditions}}\\n\\nFee: ${{6.totalFee}}\\nStatus: {{6.paymentStatus}}",
+                                    "fld4VQbtWVR82YzSZ": {},
+                                    "fldccSBOqQVbnXiY3": "Todo",
+                                    "fldqiB1bahiozcnkn": [
+                                        {
+                                            "url": "{{8.webContentLink}}",
+                                            "filename": "{{8.name}}"
+                                        }
+                                    ]
+                                },
+                                "typecast": false,
+                                "useColumnId": false
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2400,
+                                    "y": -150,
+                                    "name": "Create Airtable Record"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "base": {
+                                            "label": "DG Locations"
+                                        },
+                                        "table": {
+                                            "label": "Permits"
+                                        },
+                                        "record": {
+                                            "nested": {
+                                                "fldccSBOqQVbnXiY3": {
+                                                    "mode": "edit"
+                                                },
+                                                "fldqiB1bahiozcnkn": {
+                                                    "mode": "chose",
+                                                    "items": [
+                                                        null
+                                                    ]
+                                                }
+                                            }
+                                        },
+                                        "typecast": {
+                                            "mode": "chose"
+                                        },
+                                        "useColumnId": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "airtable3"
+                                            },
+                                            "label": "DG Locations"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 10,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "ca": "",
+                                "qs": [],
+                                "url": "https://api.glideapp.io/api/function/mutateTables",
+                                "gzip": true,
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer ad54fb67-06fe-40b1-a87d-565a003c3f49"
+                                    },
+                                    {
+                                        "name": "content-type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "timeout": 300,
+                                "useMtls": false,
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "serializeUrl": false,
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "followRedirect": true,
+                                "useQuerystring": false,
+                                "followAllRedirects": false,
+                                "rejectUnauthorized": true,
+                                "body": "{\n  \"appID\": \"TFowqRmlJ8sMhdap17C0\",\n  \"mutations\": [\n    {\n      \"kind\": \"add-row-to-table\",\n      \"tableName\": \"native-table-3KOJwq5ixiqBXx3saPGl\",\n      \"columnValues\": {\n        \"remote\\u001dfldNPQSRAfI0kDErV\": \"{{6.productionTitle}}\",\n        \"remote\\u001dfld3bs5GHXyVBetl5\": \"{{6.permitType}}\",\n        \"remote\\u001dfldX3brsgcYIBT7hM\": \"{{6.processingStatus}}\",\n        \"remote\\u001dfldpAxCxx8PkOy7dU\": \"{{6.releaseDate}}\",\n        \"remote\\u001dfldkVXQZtQcO5aut7\": \"{{6.locationManager}}\",\n        \"remote\\u001dfld6fOPWdr5hIEuZK\": \"{{6.contactPhone}}\",\n        \"remote\\u001dfldhMLfTLJ0fI7VPT\": \"{{6.productionOfficeAddress}}\",\n        \"remote\\u001dfldiDAa5nA4SckimO\": \"{{6.totalFee}}\",\n        \"remote\\u001dfldiFV3xcqW9lMF5O\": \"{{6.feeBreakdown}}\",\n        \"remote\\u001dfld9mjrvrdERceGtl\": \"{{6.invoiceNumber}}\",\n        \"remote\\u001dfldQIWaFiqvYZYOYY\": \"{{6.invoiceDate}}\",\n        \"remote\\u001dfld56VOIYvHZeQJY1\": \"{{6.paymentStatus}}\",\n        \"remote\\u001dfld7XMgho6pxAnEQE\": \"{{6.balanceDue}}\",\n        \"remote\\u001dfldz1rgcHPf2PM26X\": \"{{6.locations[0].id}}\",\n        \"remote\\u001dfldah2BkAVkPwkHAf\": \"{{6.locations[0].address}}\",\n        \"remote\\u001dfldn8p8hEtuBkTvUT\": \"{{6.locations[0].type}}\",\n        \"remote\\u001dfldEOV3pJ3RvbQ5ml\": \"{{6.locations[0].datesStart}}\",\n        \"remote\\u001dfldgtRxbeePlyzYYd\": \"{{6.locations[0].datesEnd}}\",\n        \"remote\\u001dfldBBoAx81srvG01g\": \"{{6.locations[0].filmingActivitiesDetails}}\",\n        \"remote\\u001dfld2IxZwVYilEMFVA\": \"{{6.locations[0].postingDescription}}\",\n        \"remote\\u001dfldXRD38rALKDaud9\": \"{{6.locations[0].closureDescription}}\",\n        \"remote\\u001dfldTXM2IvKmA7kswo\": \"{{6.generalTermsConditions}}\",\n        \"remote\\u001dfldt1iAWdglCJZGFU\": \"{{8.webContentLink}}\",\n        \"remote\\u001dfldfSoR6eLsGIHubY\": \"{{toString(6)}}\"\n      }\n    }\n  ]\n}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2700,
+                                    "y": -150,
+                                    "name": "Sync to Glide App"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "qs": {
+                                            "mode": "chose",
+                                            "items": []
+                                        },
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "POST"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "bodyType": {
+                                            "label": "Raw"
+                                        },
+                                        "contentType": {
+                                            "label": "JSON (application/json)"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 11,
+                            "module": "google-email:markAsRead",
+                            "version": 2,
+                            "parameters": {
+                                "__IMTCONN__": 4586772
+                            },
+                            "mapper": {
+                                "messageId": "{{2.id}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 3000,
+                                    "y": -150,
+                                    "name": "Mark Email as Read"
+                                },
+                                "restore": {
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-email"
+                                            },
+                                            "label": "modernlocations@gmail.com"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "filter": {
+                        "name": "Is PDF",
+                        "conditions": [
+                            [
+                                {
+                                    "a": "{{3.mimeType}}",
+                                    "b": "pdf",
+                                    "o": "text:contain"
+                                }
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "instant": false,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "us1.make.com"
+    }
+}

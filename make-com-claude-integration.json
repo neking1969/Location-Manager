@@ -1,0 +1,167 @@
+{
+  "name": "Permits Automation with Claude Parser",
+  "description": "Enhanced version of original blueprint with Claude API for intelligent permit parsing",
+  "newModules": [
+    {
+      "id": 11,
+      "module": "http:makeARequest",
+      "version": 3,
+      "position": "after module 2 (list attachments)",
+      "config": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "headers": [
+          {
+            "name": "x-api-key",
+            "value": "{{YOUR_ANTHROPIC_API_KEY}}"
+          },
+          {
+            "name": "anthropic-version",
+            "value": "2023-06-01"
+          },
+          {
+            "name": "content-type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "model": "claude-3-5-sonnet-20241022",
+          "max_tokens": 1024,
+          "messages": [
+            {
+              "role": "user",
+              "content": "You are a production assistant parsing permit documents for 'The Shards' TV production.\\n\\nExtract the following information from this permit email:\\n\\n**Required Fields:**\\n- Permit Number\\n- Issue Date (format: YYYY-MM-DD)\\n- Expiry Date (format: YYYY-MM-DD)\\n- Location Name\\n- Address (street, city, state, zip)\\n- Fee Amount (number only, no $)\\n\\n**Optional Fields:**\\n- Issuing Agency\\n- Contact Person\\n- Contact Email\\n- Contact Phone\\n- Parking Restrictions\\n- Time Restrictions\\n- Special Requirements\\n\\nReturn as JSON with these exact keys:\\n{\\n  \\\"permitNumber\\\": \\\"\\\",\\n  \\\"issueDate\\\": \\\"\\\",\\n  \\\"expiryDate\\\": \\\"\\\",\\n  \\\"locationName\\\": \\\"\\\",\\n  \\\"address\\\": \\\"\\\",\\n  \\\"feeAmount\\\": 0,\\n  \\\"issuingAgency\\\": \\\"\\\",\\n  \\\"contactPerson\\\": \\\"\\\",\\n  \\\"contactEmail\\\": \\\"\\\",\\n  \\\"contactPhone\\\": \\\"\\\",\\n  \\\"restrictions\\\": \\\"\\\",\\n  \\\"requirements\\\": \\\"\\\"\\n}\\n\\nEmail Subject: {{3.subject}}\\n\\nEmail Body:\\n{{3.fullTextBody}}\\n\\nAttachment Text (if PDF):\\n{{2.data}}"
+            }
+          ]
+        },
+        "parseResponse": true,
+        "timeout": 30
+      },
+      "metadata": {
+        "designer": {
+          "x": 750,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": 12,
+      "module": "json:parseJSON",
+      "version": 1,
+      "position": "after module 11 (Claude API)",
+      "config": {
+        "json": "{{11.data.content[0].text}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 900,
+          "y": 0
+        },
+        "notes": "Parses Claude's JSON response into individual fields"
+      }
+    }
+  ],
+  "updatedModules": [
+    {
+      "id": 8,
+      "module": "airtable:ActionCreateRecord",
+      "changes": {
+        "mapper.record": {
+          "fldnIGfDCRgUniXvj": "{{12.permitNumber}}",
+          "fld8mAAInACYKnWio": "Restrictions: {{12.restrictions}}\\n\\nRequirements: {{12.requirements}}\\n\\nIssuing Agency: {{12.issuingAgency}}\\nContact: {{12.contactPerson}}\\nEmail: {{12.contactEmail}}\\nPhone: {{12.contactPhone}}",
+          "fld4VQbtWVR82YzSZ": {},
+          "fldccSBOqQVbnXiY3": "Todo",
+          "fldqiB1bahiozcnkn": [
+            {
+              "url": "{{10.webContentLink}}",
+              "filename": "{{10.name}}"
+            }
+          ],
+          "NEW_COLUMN_issue_date": "{{12.issueDate}}",
+          "NEW_COLUMN_expiry_date": "{{12.expiryDate}}",
+          "NEW_COLUMN_location": "{{12.locationName}}",
+          "NEW_COLUMN_address": "{{12.address}}",
+          "NEW_COLUMN_fee_amount": "{{12.feeAmount}}"
+        }
+      },
+      "notes": "Updated to use Claude-parsed permit data. Add new columns to Airtable first!"
+    }
+  ],
+  "airtableColumnsToAdd": [
+    {
+      "name": "Issue Date",
+      "type": "date",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Expiry Date",
+      "type": "date",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Location",
+      "type": "text",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Address",
+      "type": "text",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Fee Amount",
+      "type": "currency",
+      "format": "usd",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Issuing Agency",
+      "type": "text",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Contact Person",
+      "type": "text",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Contact Email",
+      "type": "email",
+      "fieldId": "TBD"
+    },
+    {
+      "name": "Contact Phone",
+      "type": "phone",
+      "fieldId": "TBD"
+    }
+  ],
+  "setup": {
+    "step1": "Get Anthropic API key from https://console.anthropic.com/settings/keys",
+    "step2": "Add new columns to Airtable 'Permits' table (see airtableColumnsToAdd above)",
+    "step3": "In Make.com, add HTTP module (id: 11) after 'List Email Attachments' module",
+    "step4": "Add JSON Parse module (id: 12) after HTTP module",
+    "step5": "Update Airtable Create Record module (id: 8) with new field mappings",
+    "step6": "Test with sample permit email",
+    "step7": "Monitor parsing accuracy and adjust Claude prompt if needed"
+  },
+  "testing": {
+    "sampleEmail": {
+      "subject": "Film Permit Approved - Debbie's House",
+      "body": "Your filming permit FP-2025-1234 has been approved.\\n\\nLocation: Debbie's House, Sunset Blvd\\nAddress: 1234 Sunset Blvd, Los Angeles, CA 90028\\nIssue Date: December 15, 2025\\nExpiry Date: December 20, 2025\\nFee: $450.00\\n\\nContact: Jane Smith\\nEmail: jane@filmla.com\\nPhone: (213) 555-1234\\n\\nRestrictions:\\n- No parking on Sunset Blvd 7am-7pm\\n- Noise ordinance applies after 10pm\\n\\nRequirements:\\n- Fire safety officer required\\n- Proof of insurance"
+    },
+    "expectedOutput": {
+      "permitNumber": "FP-2025-1234",
+      "issueDate": "2025-12-15",
+      "expiryDate": "2025-12-20",
+      "locationName": "Debbie's House, Sunset Blvd",
+      "address": "1234 Sunset Blvd, Los Angeles, CA 90028",
+      "feeAmount": 450,
+      "issuingAgency": "",
+      "contactPerson": "Jane Smith",
+      "contactEmail": "jane@filmla.com",
+      "contactPhone": "(213) 555-1234",
+      "restrictions": "No parking on Sunset Blvd 7am-7pm\\nNoise ordinance applies after 10pm",
+      "requirements": "Fire safety officer required\\nProof of insurance"
+    }
+  }
+}
