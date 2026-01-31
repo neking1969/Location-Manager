@@ -1,42 +1,27 @@
-import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import ProjectList from './components/ProjectList';
-import ProjectView from './components/ProjectView';
-import SetDetail from './components/SetDetail';
+import React from 'react';
+import { Routes, Route, Link } from 'react-router-dom';
+import GlideDashboard from './components/GlideDashboard';
 
 function App() {
-  const location = useLocation();
-  const [currentProject, setCurrentProject] = useState(null);
-
   return (
     <div className="app-container">
       <header className="header">
-        <h1>
-          <Link to="/" style={{ color: 'white', textDecoration: 'none' }}>
-            Location Cost Tracker
-          </Link>
-        </h1>
-        {currentProject && (
-          <div style={{ fontSize: '0.875rem', color: 'var(--gray-400)' }}>
-            {currentProject.name}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h1>
+            <Link to="/" style={{ color: 'var(--foreground)', textDecoration: 'none' }}>
+              Shards Ledger
+            </Link>
+          </h1>
+        </div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+          The Shards - Season 1
+        </div>
       </header>
 
       <main className="main-content">
         <Routes>
-          <Route
-            path="/"
-            element={<ProjectList onSelectProject={setCurrentProject} />}
-          />
-          <Route
-            path="/project/:projectId/*"
-            element={<ProjectView onProjectLoad={setCurrentProject} />}
-          />
-          <Route
-            path="/set/:setId"
-            element={<SetDetail />}
-          />
+          <Route path="/" element={<GlideDashboard />} />
+          <Route path="*" element={<GlideDashboard />} />
         </Routes>
       </main>
     </div>

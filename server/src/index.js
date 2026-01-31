@@ -8,6 +8,7 @@ const setRoutes = require('./routes/sets');
 const costRoutes = require('./routes/costs');
 const uploadRoutes = require('./routes/upload');
 const reportsRoutes = require('./routes/reports');
+const glideRoutes = require('./routes/glide');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -27,6 +28,7 @@ app.use('/api/sets', setRoutes);
 app.use('/api/costs', costRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/glide', glideRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

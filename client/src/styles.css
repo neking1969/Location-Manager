@@ -1,20 +1,30 @@
-/* Global Styles */
+/* Global Styles - Dark Shards Theme */
 :root {
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --success: #10b981;
-  --danger: #ef4444;
+  /* Dark mode - The Shards theme */
+  --background: #0f0f0f;
+  --foreground: #f5f5f5;
+  --card: #1a1a1a;
+  --card-border: #2a2a2a;
+  --accent: #E63946;
+  --accent-hover: #c62f3b;
+  --success: #22c55e;
   --warning: #f59e0b;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
+  --danger: #ef4444;
+  --muted: #737373;
+
+  /* Legacy variable mappings */
+  --primary: #E63946;
+  --primary-dark: #c62f3b;
+  --gray-50: #1a1a1a;
+  --gray-100: #1f1f1f;
+  --gray-200: #2a2a2a;
+  --gray-300: #3a3a3a;
+  --gray-400: #737373;
+  --gray-500: #8a8a8a;
+  --gray-600: #a0a0a0;
+  --gray-700: #c0c0c0;
+  --gray-800: #e0e0e0;
+  --gray-900: #f5f5f5;
 }
 
 * {
@@ -25,8 +35,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--gray-100);
-  color: var(--gray-800);
+  background-color: var(--background);
+  color: var(--foreground);
   line-height: 1.5;
 }
 
@@ -38,18 +48,19 @@ body {
 }
 
 .header {
-  background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-900) 100%);
+  background: var(--card);
+  border-bottom: 1px solid var(--card-border);
   color: white;
   padding: 1rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header h1 {
   font-size: 1.5rem;
   font-weight: 600;
+  color: var(--foreground);
 }
 
 .header nav {
@@ -58,7 +69,7 @@ body {
 }
 
 .header nav a {
-  color: var(--gray-300);
+  color: var(--muted);
   text-decoration: none;
   padding: 0.5rem 1rem;
   border-radius: 0.375rem;
@@ -67,7 +78,7 @@ body {
 
 .header nav a:hover,
 .header nav a.active {
-  color: white;
+  color: var(--foreground);
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -81,9 +92,9 @@ body {
 
 /* Cards */
 .card {
-  background: white;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
 }
@@ -94,13 +105,13 @@ body {
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid var(--card-border);
 }
 
 .card-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--gray-800);
+  color: var(--foreground);
 }
 
 /* Summary Cards */
@@ -112,10 +123,10 @@ body {
 }
 
 .summary-card {
-  background: white;
-  border-radius: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
   padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .summary-card.under-budget {
@@ -128,7 +139,7 @@ body {
 
 .summary-label {
   font-size: 0.875rem;
-  color: var(--gray-500);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -136,7 +147,7 @@ body {
 .summary-value {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--gray-800);
+  color: var(--foreground);
   margin-top: 0.25rem;
 }
 
@@ -150,7 +161,7 @@ body {
 
 .summary-detail {
   font-size: 0.875rem;
-  color: var(--gray-500);
+  color: var(--muted);
   margin-top: 0.5rem;
 }
 
@@ -167,20 +178,20 @@ table {
 th, td {
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid var(--card-border);
 }
 
 th {
-  background: var(--gray-50);
+  background: var(--background);
   font-weight: 600;
-  color: var(--gray-600);
+  color: var(--muted);
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 tr:hover {
-  background: var(--gray-50);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .amount {
@@ -212,17 +223,17 @@ tr:hover {
 }
 
 .btn-primary {
-  background: var(--primary);
+  background: var(--accent);
   color: white;
 }
 
 .btn-primary:hover {
-  background: var(--primary-dark);
+  background: var(--accent-hover);
 }
 
 .btn-secondary {
-  background: var(--gray-200);
-  color: var(--gray-700);
+  background: var(--card-border);
+  color: var(--foreground);
 }
 
 .btn-secondary:hover {
@@ -252,7 +263,7 @@ tr:hover {
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--gray-700);
+  color: var(--foreground);
   margin-bottom: 0.25rem;
 }
 
@@ -260,17 +271,19 @@ tr:hover {
 .form-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--gray-300);
+  border: 1px solid var(--card-border);
   border-radius: 0.375rem;
   font-size: 1rem;
   transition: border-color 0.2s;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 .form-input:focus,
 .form-select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.2);
 }
 
 .form-row {
@@ -281,36 +294,37 @@ tr:hover {
 
 /* Upload Area */
 .upload-area {
-  border: 2px dashed var(--gray-300);
+  border: 2px dashed var(--card-border);
   border-radius: 0.5rem;
   padding: 2rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
+  background: var(--card);
 }
 
 .upload-area:hover {
-  border-color: var(--primary);
-  background: var(--gray-50);
+  border-color: var(--accent);
+  background: rgba(230, 57, 70, 0.05);
 }
 
 .upload-area.dragging {
-  border-color: var(--primary);
-  background: rgba(37, 99, 235, 0.05);
+  border-color: var(--accent);
+  background: rgba(230, 57, 70, 0.1);
 }
 
 .upload-icon {
   font-size: 3rem;
-  color: var(--gray-400);
+  color: var(--muted);
   margin-bottom: 1rem;
 }
 
 .upload-text {
-  color: var(--gray-600);
+  color: var(--muted);
 }
 
 .upload-text strong {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 /* Status Badges */
@@ -323,29 +337,29 @@ tr:hover {
 }
 
 .badge-success {
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
 }
 
 .badge-danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
 .badge-warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
 }
 
 .badge-info {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(230, 57, 70, 0.2);
+  color: #E63946;
 }
 
 /* Progress Bar */
 .progress-bar {
   height: 0.5rem;
-  background: var(--gray-200);
+  background: var(--card-border);
   border-radius: 9999px;
   overflow: hidden;
   margin-top: 0.5rem;
@@ -376,7 +390,7 @@ tr:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,8 +398,9 @@ tr:hover {
 }
 
 .modal {
-  background: white;
-  border-radius: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: 500px;
   width: 90%;
@@ -403,6 +418,7 @@ tr:hover {
 .modal-title {
   font-size: 1.25rem;
   font-weight: 600;
+  color: var(--foreground);
 }
 
 .modal-close {
@@ -410,11 +426,11 @@ tr:hover {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: var(--gray-400);
+  color: var(--muted);
 }
 
 .modal-close:hover {
-  color: var(--gray-600);
+  color: var(--foreground);
 }
 
 .modal-footer {
@@ -423,14 +439,14 @@ tr:hover {
   gap: 0.5rem;
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--gray-200);
+  border-top: 1px solid var(--card-border);
 }
 
 /* Empty State */
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: var(--gray-500);
+  color: var(--muted);
 }
 
 .empty-state-icon {
@@ -441,7 +457,7 @@ tr:hover {
 .empty-state-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--gray-700);
+  color: var(--foreground);
   margin-bottom: 0.5rem;
 }
 
@@ -450,7 +466,7 @@ tr:hover {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid var(--card-border);
 }
 
 .tab {
@@ -460,19 +476,19 @@ tr:hover {
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--gray-500);
+  color: var(--muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: all 0.2s;
 }
 
 .tab:hover {
-  color: var(--gray-700);
+  color: var(--foreground);
 }
 
 .tab.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 /* Alert */
@@ -483,21 +499,21 @@ tr:hover {
 }
 
 .alert-success {
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .alert-error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .alert-warning {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 /* Loading */
@@ -511,8 +527,8 @@ tr:hover {
 .spinner {
   width: 2rem;
   height: 2rem;
-  border: 3px solid var(--gray-200);
-  border-top-color: var(--primary);
+  border: 3px solid var(--card-border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -529,17 +545,36 @@ tr:hover {
 }
 
 .comparison-row.over-budget {
-  background: #fef2f2;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .comparison-row.over-budget:hover {
-  background: #fee2e2;
+  background: rgba(239, 68, 68, 0.15);
 }
 
 /* Chart Container */
 .chart-container {
   height: 300px;
   margin: 1rem 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 /* Responsive */
