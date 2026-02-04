@@ -44,14 +44,20 @@ export async function handleSync(input) {
     let glideApiErrors = [];
 
     try {
+      console.log('[Sync] Fetching Glide locations...');
       glideLocations = await glide.getLocations();
+      console.log(`[Sync] Fetched ${glideLocations.length} Glide locations`);
     } catch (e) {
+      console.error('[Sync] Glide locations error:', e.message);
       glideApiErrors.push({ source: 'locations', error: e.message });
     }
 
     try {
+      console.log('[Sync] Fetching Glide vendors...');
       glideVendors = await glide.getVendors();
+      console.log(`[Sync] Fetched ${glideVendors.length} Glide vendors`);
     } catch (e) {
+      console.error('[Sync] Glide vendors error:', e.message);
       glideApiErrors.push({ source: 'vendors', error: e.message });
     }
 
@@ -80,6 +86,11 @@ export async function handleSync(input) {
       const vendorInferenceStats = inferLocationsFromVendor(results.ledgers, vendorMap);
       results.vendorInference = { mapStats: vendorMapStats, inferenceStats: vendorInferenceStats };
 
+      // Pass 2b: Date-vendor triangulation
+      // For transactions without location, check if same vendor + same date has a location
+      const dateVendorStats = inferFromSameVendorDate(results.ledgers);
+      results.dateVendorInference = dateVendorStats;
+
       // Pass 3: Categorize remaining unmatched as Production Overhead
       const overheadStats = categorizeProductionOverhead(results.ledgers);
       results.productionOverhead = overheadStats;
@@ -102,6 +113,62 @@ export async function handleSync(input) {
         glideLocations,
         input.locationMappings || {}
       );
+
+      // Helper to normalize location strings for consistent lookup
+      const normalizeLoc = (str) => {
+        if (!str) return '';
+        return str.toUpperCase().replace(/[^A-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+      };
+
+      // 4b. Apply matched locations to individual transactions
+      const matchedLookup = new Map();
+      for (const match of (results.locations?.matched || [])) {
+        // Use matches with 60%+ confidence (same as matcher threshold)
+        if (match.confidence >= 60) {
+          matchedLookup.set(normalizeLoc(match.ledgerLocation), {
+            mappedLocation: match.mappedLocation,
+            confidence: match.confidence,
+            rowId: match.rowId
+          });
+        }
+      }
+
+      // Build service charge lookup
+      const serviceChargeLookup = new Set();
+      for (const sc of (results.locations?.serviceCharges || [])) {
+        serviceChargeLookup.add(normalizeLoc(sc.ledgerLocation));
+      }
+
+      // Apply matched locations to all transactions
+      let matchedTxnCount = 0;
+      let serviceChargeCount = 0;
+      for (const ledger of results.ledgers.ledgers || []) {
+        for (const txn of ledger.transactions || []) {
+          if (txn.location) {
+            const normalizedLoc = normalizeLoc(txn.location);
+
+            // Check service charges first
+            if (serviceChargeLookup.has(normalizedLoc)) {
+              txn.isServiceCharge = true;
+              txn.matchedLocation = 'SERVICE_CHARGE';
+              txn.category = 'production_overhead';
+              serviceChargeCount++;
+              continue;
+            }
+
+            // Check matched locations
+            const match = matchedLookup.get(normalizedLoc);
+            if (match) {
+              txn.matchedLocation = match.mappedLocation;
+              txn.matchedConfidence = match.confidence;
+              txn.glideRowId = match.rowId;
+              matchedTxnCount++;
+            }
+          }
+        }
+      }
+      console.log(`[Sync] Applied matched locations to ${matchedTxnCount} transactions (${matchedLookup.size} unique locations)`);
+      console.log(`[Sync] Marked ${serviceChargeCount} transactions as service charges (${serviceChargeLookup.size} unique locations)`);
 
       // 5. Extract and match vendors
       const ledgerVendors = extractVendors(results.ledgers);
@@ -334,6 +401,69 @@ export async function handleResolveLocation(input) {
   }
 
   return result;
+}
+
+/**
+ * Date-vendor triangulation inference
+ * For transactions without location, check if same vendor + same date range has a location
+ * Example: EAST WEST LOCATIONS with "10/23 ART MOVING" can inherit location from
+ *          "10/23 TV REMOVAL/REINSTALL" if that one has a location
+ */
+function inferFromSameVendorDate(ledgers) {
+  const stats = { inferred: 0, checked: 0, vendorsProcessed: 0 };
+
+  for (const ledger of ledgers.ledgers || []) {
+    // Build vendor-date-location map
+    const vendorDateMap = new Map();
+
+    for (const txn of ledger.transactions || []) {
+      if (!txn.vendor || !txn.description) continue;
+
+      // Extract date from description (formats: "MM/DD", "MM/DD-MM/DD", "MM/DD-DD")
+      const dateMatch = txn.description.match(/^(\d{1,2}\/\d{1,2})(?:-(\d{1,2}\/?\d*))?/);
+      if (!dateMatch) continue;
+
+      const dateKey = dateMatch[1]; // Use start date as key
+      const key = `${txn.vendor}|${dateKey}`;
+
+      if (!vendorDateMap.has(key)) {
+        vendorDateMap.set(key, { locations: [], noLocation: [] });
+      }
+
+      const entry = vendorDateMap.get(key);
+      // Check if transaction has a valid location (not empty, not generic fragments)
+      const hasValidLocation = txn.location &&
+        txn.location.length > 3 &&
+        !/^(FINAL|ADD'?L|SITE REP|IN HOUSE|NO WEEKENDS|GUARDS|DRIVING)$/i.test(txn.location);
+
+      if (hasValidLocation) {
+        entry.locations.push(txn.location);
+      } else if (!txn.location || txn.location.length <= 3) {
+        entry.noLocation.push(txn);
+      }
+    }
+
+    // Apply inferences - transactions without location get location from same vendor+date
+    for (const [key, entry] of vendorDateMap) {
+      if (entry.locations.length > 0 && entry.noLocation.length > 0) {
+        // Use most common location (first occurrence)
+        const inferredLoc = entry.locations[0];
+        for (const txn of entry.noLocation) {
+          if (!txn.inferredLocation) { // Don't override existing inferences
+            txn.inferredLocation = inferredLoc;
+            txn.locationSource = 'date-vendor';
+            stats.inferred++;
+          }
+        }
+      }
+      stats.checked += entry.noLocation.length;
+    }
+
+    stats.vendorsProcessed += vendorDateMap.size;
+  }
+
+  console.log(`[Sync] Date-vendor triangulation: inferred ${stats.inferred} locations from ${stats.checked} checked`);
+  return stats;
 }
 
 export default {

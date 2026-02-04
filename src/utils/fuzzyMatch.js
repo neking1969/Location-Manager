@@ -89,35 +89,60 @@ export function matchLocation(ledgerLocation, glideLocations, locationMappings =
   // First check explicit mappings
   const normalized = normalize(ledgerLocation);
 
-  // Check direct mapping
-  if (locationMappings.mappings) {
-    for (const [key, value] of Object.entries(locationMappings.mappings)) {
-      if (normalize(key) === normalized) {
-        // Check if it's an UNKNOWN mapping
-        if (value.startsWith('UNKNOWN')) {
-          const isServiceCharge = locationMappings.serviceChargeLocations?.some(
-            sc => normalize(sc) === normalized
-          ) || false;
+  // Check direct mapping - support both array format (from S3) and object format
+  const mappingsArray = locationMappings.mappings || [];
+
+  // Convert array format to lookup
+  for (const mapping of mappingsArray) {
+    if (!mapping.ledgerLocation) continue;
+
+    // Check exact match
+    const mappingNormalized = normalize(mapping.ledgerLocation);
+    if (mappingNormalized === normalized) {
+      // Check if it's a service charge / production overhead
+      if (mapping.budgetLocation === 'SERVICE_CHARGE' || mapping.budgetLocation === 'PRODUCTION_OVERHEAD') {
+        return {
+          match: null,
+          confidence: 0,
+          reason: mapping.budgetLocation,
+          isServiceCharge: true
+        };
+      }
+      return {
+        match: mapping.budgetLocation,
+        confidence: 100,
+        reason: 'explicit mapping'
+      };
+    }
+
+    // Check aliases
+    if (mapping.aliases) {
+      for (const alias of mapping.aliases) {
+        const aliasNormalized = normalize(alias);
+        if (aliasNormalized === normalized) {
+          if (mapping.budgetLocation === 'SERVICE_CHARGE' || mapping.budgetLocation === 'PRODUCTION_OVERHEAD') {
+            return {
+              match: null,
+              confidence: 0,
+              reason: mapping.budgetLocation,
+              isServiceCharge: true
+            };
+          }
           return {
-            match: null,
-            confidence: 0,
-            reason: value,
-            isServiceCharge
+            match: mapping.budgetLocation,
+            confidence: 100,
+            reason: 'alias mapping'
           };
         }
-        return {
-          match: value,
-          confidence: 100,
-          reason: 'explicit mapping'
-        };
       }
     }
   }
 
   // Try fuzzy matching against Glide locations
+  // Note: Glide returns 'Name' which fromGlideRow transforms to 'locationName'
   const candidates = glideLocations.map(loc => ({
-    name: loc.name,
-    rowId: loc.rowId
+    name: loc.locationName || loc.name || loc.Name,
+    rowId: loc.rowId || loc['$rowID']
   }));
 
   const result = findBestMatch(ledgerLocation, candidates, {

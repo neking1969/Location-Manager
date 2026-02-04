@@ -1,0 +1,324 @@
+{
+  "mappings": [
+    {
+      "ledgerLocation": "GALLERIA",
+      "budgetLocation": "Galleria Mall ",
+      "aliases": ["GALLERIA MALL", "GLENDALE GALLERIA", "THE GALLERIA"]
+    },
+    {
+      "ledgerLocation": "GALLERIA PARKING LOT",
+      "budgetLocation": "Galleria Parking Lot/Driving ",
+      "aliases": ["GALLERIA PKG", "GALLERIA PARKING"]
+    },
+    {
+      "ledgerLocation": "WESTWOOD VILLAGE THEATER",
+      "budgetLocation": "Village Theater - Westwood ",
+      "aliases": ["VILLAGE THEATER", "BROXTON", "BROXTON THEATER", "FOX THEATER WESTWOOD", "BROXTON/VILLAGE THEATER", "PRE PRED VILLAGE"]
+    },
+    {
+      "ledgerLocation": "HS PARTY HOUSE",
+      "budgetLocation": "High School Party (Summer Night)",
+      "aliases": ["HIGH SCHOOL PARTY", "HS PARTY", "SUMMER NIGHT PARTY", "SUMMER NIGHT"]
+    },
+    {
+      "ledgerLocation": "VENTURA BLVD",
+      "budgetLocation": "Ext. Ventura Blvd/Int. Brets Car- Driving",
+      "aliases": ["VENTURA BLVD.", "VENTURA DRIVE", "VENTURA DRIVING", "VENTURA BLVD DRIVING", "VENTURA BLVD DRIVE"]
+    },
+    {
+      "ledgerLocation": "DRIVING PT.2",
+      "budgetLocation": "Ext. Valley Vista- Driving ",
+      "aliases": ["DRIVING PT 2", "VALLEY VISTA DRIVING", "VALLEY VISTA", "VALLEY VISTA BLVD"]
+    },
+    {
+      "ledgerLocation": "12/08 DRIVING SCENES",
+      "budgetLocation": "Ext. Mullholland Drive & Ext. LA- Driving ",
+      "aliases": ["12/08 DRIVING", "DRIVING SCENES", "MULHOLLAND DRIVING", "MULLHOLLAND DRIVING"]
+    },
+    {
+      "ledgerLocation": "MELROSE VIDEO BAR",
+      "budgetLocation": "Ext. Melrose Video Bar",
+      "aliases": ["MELROSE BAR", "MLROSE BAR", "MLROSE BAR(102", "MELROSE VIDEO", "EXT MELROSE", "EXT. MELROSE AVE.", "MELRSE VID BR", "MELROSE/ASYLUM", "ASYLUM/MELROSE VIDEO BAR BA", "ASYLUM/VIDEO BAR", "MELRSE VID BAR"]
+    },
+    {
+      "ledgerLocation": "BUNGALOW",
+      "budgetLocation": "West Hollywood Bungalow",
+      "aliases": ["WEHO BUNGALOW", "WH BUNGALOW", "BUNGALOW ADD'L DAY", "BUNGALOW ADDL DAY"]
+    },
+    {
+      "ledgerLocation": "BEVERLY HILLS HOUSE",
+      "budgetLocation": "Int. Hancock Park House/BH Home",
+      "aliases": ["BH HOUSE", "BH HOME", "HANCOCK PARK", "HANCOCK PARK HOUSE", "HANCOCK/BH HOUSE"]
+    },
+    {
+      "ledgerLocation": "BEL AIR MANSION",
+      "budgetLocation": "Ext. LA- Bel Air Mansion",
+      "aliases": ["BEL AIR", "BELAIR MANSION", "LA BEL AIR"]
+    },
+    {
+      "ledgerLocation": "ROLLER RINK",
+      "budgetLocation": "Moonlight Roller Rink ",
+      "aliases": ["MOONLIGHT ROLLER RINK", "MOONLIGHT RINK", "ROLLER SKATING"]
+    },
+    {
+      "ledgerLocation": "RINK ALLEY",
+      "budgetLocation": "Ext.Roller Rink Alley ",
+      "aliases": ["ROLLER RINK ALLEY"]
+    },
+    {
+      "ledgerLocation": "TOWER RECORDS",
+      "budgetLocation": "Tower Records",
+      "aliases": ["TOWER"]
+    },
+    {
+      "ledgerLocation": "LE DOME",
+      "budgetLocation": "Le Dome",
+      "aliases": ["LEDOME", "LE DOME RESTAURANT"]
+    },
+    {
+      "ledgerLocation": "BUCKLEY",
+      "budgetLocation": "Buckley Courtyard / Parking Lot- 101 and 102",
+      "aliases": ["BUCKLEY COURTYARD", "BUCKLEY PARKING", "BUCKLEY SCHOOL", "BUCKLEY H.S.", "BUCKLEY HS", "BUCKLEY HIGH SCHOOL", "BUCKLEY HS PT2"]
+    },
+    {
+      "ledgerLocation": "BUCKLEY GYM",
+      "budgetLocation": "Buckley - Gymnasium  & Assembly ",
+      "aliases": ["BUCKLEY GYMNASIUM", "BUCKLEY ASSEMBLY"]
+    },
+    {
+      "ledgerLocation": "BRENTWOOD",
+      "budgetLocation": "Brentwood Home",
+      "aliases": ["BRENTWOOD HOME", "BRENTWOOD HOUSE"]
+    },
+    {
+      "ledgerLocation": "PALACE THEATER",
+      "budgetLocation": "Palace Theater ",
+      "aliases": ["PALACE", "PALACE THEATRE"]
+    },
+    {
+      "ledgerLocation": "HOTEL CORTEZ",
+      "budgetLocation": "Hotel Cortez (Upholstery)",
+      "aliases": ["CORTEZ", "CORTEZ HOTEL", "UPHOLSTERY"]
+    },
+    {
+      "ledgerLocation": "KELLER RESIDENCE",
+      "budgetLocation": "Matt's Pool House/Keller Residence (101 & 102)",
+      "aliases": ["MATTS POOL HOUSE", "MATT'S POOL HOUSE", "KELLER", "POOL HOUSE", "KELLNER HOUSE", "KELLNERS HOUSE", "KELLNER'S HOUSE", "MATT KELLNER HOUSE", "KELLER'S HOUSE", "MATT KELLNER'S HOUSE"]
+    },
+    {
+      "ledgerLocation": "DEBBIE'S HOUSE",
+      "budgetLocation": "Debbie's House Sunset Blvd",
+      "aliases": ["DEBBIES HOUSE", "DEBBIE HOUSE", "SUNSET BLVD HOUSE", "SUNSHINE TER"]
+    },
+    {
+      "ledgerLocation": "RYAN'S HOUSE",
+      "budgetLocation": "Ryan's House ",
+      "aliases": ["RYANS HOUSE", "RYAN HOUSE"]
+    },
+    {
+      "ledgerLocation": "SUSAN'S HOUSE",
+      "budgetLocation": "Susan's House",
+      "aliases": ["SUSANS HOUSE", "SUSAN HOUSE"]
+    },
+    {
+      "ledgerLocation": "BRET'S HOUSE",
+      "budgetLocation": "Bret's House",
+      "aliases": ["BRETS HOUSE", "BRET HOUSE", "BRET'S HOUSE", "BRET'S HOUSE BACKING PHOTOS", "BRETT'S HOUSE", "BRETTS HOUSE"]
+    },
+    {
+      "ledgerLocation": "BENEDICT CANYON",
+      "budgetLocation": "Benedict Canyon House",
+      "aliases": ["BENEDICT CANYON HOUSE"]
+    },
+    {
+      "ledgerLocation": "LATCHFORD",
+      "budgetLocation": "Latchford House ",
+      "aliases": ["LATCHFORD HOUSE", "LATCHFRD HSE", "LATCHFRD HOUSE"]
+    },
+    {
+      "ledgerLocation": "SECRET STREET",
+      "budgetLocation": "Ext Secret Street",
+      "aliases": ["EXT SECRET STREET"]
+    },
+    {
+      "ledgerLocation": "SHERMAN OAKS",
+      "budgetLocation": "Ext Sherman Oaks- (4 way intersection)",
+      "aliases": ["SHERMAN OAKS INTERSECTION", "4 WAY INTERSECTION"]
+    },
+    {
+      "ledgerLocation": "SUPERMARKET",
+      "budgetLocation": "Supermarket - Beachwood Village",
+      "aliases": ["BEACHWOOD VILLAGE", "BEACHWOOD SUPERMARKET"]
+    },
+    {
+      "ledgerLocation": "TENNIS COURT",
+      "budgetLocation": "Woodland Hills Tennis Court",
+      "aliases": ["WOODLAND HILLS TENNIS", "TENNIS"]
+    },
+    {
+      "ledgerLocation": "STABLES",
+      "budgetLocation": "The Stables",
+      "aliases": ["THE STABLES"]
+    },
+    {
+      "ledgerLocation": "WAREHOUSE",
+      "budgetLocation": "Ext. Warehouse (Erotica Studios)",
+      "aliases": ["EROTICA STUDIOS", "EROTICA WAREHOUSE"]
+    },
+    {
+      "ledgerLocation": "SLP STAGE",
+      "budgetLocation": "Sunset Las Palmas - Stage - Dance Off ",
+      "aliases": ["SUNSET LAS PALMAS", "DANCE OFF STAGE", "SLP", "LAS PALMAS STAGE"]
+    },
+    {
+      "ledgerLocation": "MALIBU BEACH",
+      "budgetLocation": "Ext Malibu Remote Beach ",
+      "aliases": ["REMOTE BEACH", "MALIBU REMOTE BEACH"]
+    },
+    {
+      "ledgerLocation": "PCH DRIVING",
+      "budgetLocation": "Parking Lot by the Ocean/Remote Beach/ PCH Driving ",
+      "aliases": ["PCH", "OCEAN PARKING LOT", "BEACH PARKING"]
+    },
+    {
+      "ledgerLocation": "WOODLEY AVE",
+      "budgetLocation": "Ext. Mullholland Drive (WOODLEY AVE)",
+      "aliases": ["WOODLEY", "MULHOLLAND WOODLEY"]
+    },
+    {
+      "ledgerLocation": "PARKING GARAGE",
+      "budgetLocation": "3rd Floor Parking Garage (Pico Blvd)",
+      "aliases": ["PICO PARKING", "PICO GARAGE", "3RD FLOOR GARAGE", "3RD FLR PRKG", "3RD FL PARKING"]
+    },
+    {
+      "ledgerLocation": "RAMIREZ STREET",
+      "budgetLocation": "Ext. LA Street (Richard Ramirez)",
+      "aliases": ["RICHARD RAMIREZ", "RAMIREZ"]
+    },
+    {
+      "ledgerLocation": "SUBURBAN HOUSE",
+      "budgetLocation": "Suburban House",
+      "aliases": ["SUBURBAN"]
+    },
+    {
+      "ledgerLocation": "PERMITS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["PERMIT", "PERMIT FEE", "PERMIT FEES", "FILMING PERMIT"]
+    },
+    {
+      "ledgerLocation": "BASECAMP",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["BASE CAMP", "BASECAMPS"]
+    },
+    {
+      "ledgerLocation": "SERVICE FEE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["SERVICE FEES", "SERVICE"]
+    },
+    {
+      "ledgerLocation": "SITE REP",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["SITE REPS", "SITE REPRESENTATIVE"]
+    },
+    {
+      "ledgerLocation": "GUARDS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["GUARD", "SECURITY GUARDS", "SECURITY"]
+    },
+    {
+      "ledgerLocation": "DUMPSTERS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["DUMPSTER", "TRASH", "WASTE"]
+    },
+    {
+      "ledgerLocation": "TENTS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["TENT", "CANOPY", "SHADE"]
+    },
+    {
+      "ledgerLocation": "MAPS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["MAP", "MAPPING"]
+    },
+    {
+      "ledgerLocation": "CATERING",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["CRAFT SERVICES", "CRAFTY", "MEALS"]
+    },
+    {
+      "ledgerLocation": "SAFETY OFFICER",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["SAFETY", "SAFETY COORDINATOR"]
+    },
+    {
+      "ledgerLocation": "AIR QUALITY",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["AIR QUALITY MONITORING", "AQM"]
+    },
+    {
+      "ledgerLocation": "FIRE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["FIRE SAFETY", "FIRE WATCH", "FIRE MARSHAL"]
+    },
+    {
+      "ledgerLocation": "SUPPORT",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["PRODUCTION SUPPORT"]
+    },
+    {
+      "ledgerLocation": "HONEY WAGON",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["HONEYWAGON", "HONEY WAGONS", "RESTROOM", "PORTABLE RESTROOM"]
+    },
+    {
+      "ledgerLocation": "GENERATORS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["GENERATOR", "POWER", "GENNY"]
+    },
+    {
+      "ledgerLocation": "PARKING",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["CREW PARKING", "PARKING FEES"]
+    },
+    {
+      "ledgerLocation": "POLICE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["POLICE OFFICERS", "LAPD", "OFFICERS"]
+    },
+    {
+      "ledgerLocation": "MEDIC",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["MEDICS", "SET MEDIC", "FIRST AID"]
+    },
+    {
+      "ledgerLocation": "CLEANING SERVICE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["CLEANING", "JANITORIAL"]
+    },
+    {
+      "ledgerLocation": "FINAL",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["FINAL WALK", "FINAL CLEANUP"]
+    },
+    {
+      "ledgerLocation": "REMOVE/RESTORE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["REMOVE RESTORE", "RESTORE"]
+    },
+    {
+      "ledgerLocation": "SVC FEE",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["SVC FEES"]
+    },
+    {
+      "ledgerLocation": "ADD'L",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["ADDL", "ADDITIONAL"]
+    }
+  ],
+  "notes": {
+    "SERVICE_CHARGE": "Production overhead services not tied to specific locations - excluded from budget comparison",
+    "updated": "2026-02-04",
+    "version": "2.0"
+  }
+}
