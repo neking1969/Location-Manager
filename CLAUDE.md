@@ -16,7 +16,7 @@ Budget tracking and Glide synchronization for The Shards TV production.
 - Glide App: https://go.glideapps.com/app/TFowqRmlJ8sMhdap17C0
 - Glide Live: https://the-shards-season-1-fcmz.glide.page
 - Make.com Scenario: https://us1.make.com/300311/scenarios/4528779/edit
-- **Ledger Dashboard (ONLY External UI)**: https://main.d2nhaxprh2fg8e.amplifyapp.com/locations
+- **Ledger Dashboard (ONLY External UI)**: https://main.d2nhaxprh2fg8e.amplifyapp.com
 
 ---
 
@@ -41,6 +41,7 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Payroll Date Pattern** | ✅ Done | Extracts dates from `MM/DD/YY :` format |
 | **Vendor Location Map** | ✅ Done | Infers location from vendor history |
 | **Production Overhead** | ✅ Done | Categorizes uninferrable payroll/permits |
+| **Cloud-Only Architecture** | ✅ Done | Dashboard reads from Lambda/S3, no local files |
 | **PRODUCTION STATUS** | ✅ **READY** | All systems go! |
 
 ---
@@ -63,14 +64,16 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | Scenario ID | 4528779 |
 | Webhook URL | `https://hook.us1.make.com/k3snwjfpk65auz4wa49tiancqdla1d1o` |
 
-### AWS Lambda
+### AWS Lambda (Main)
 | Item | Value |
 |------|-------|
 | Function Name | `location-manager-sync` |
 | Region | `us-west-2` |
 | Base URL | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws` |
 | Sync Endpoint | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync` |
+| **Data Endpoint** | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/data` |
 | Health Endpoint | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/health` |
+| Mappings Endpoint | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/mappings` |
 
 ### AWS Lambda (Sync Status Reader)
 | Item | Value |
@@ -79,12 +82,24 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | Function URL | `https://hhg666k2cv4wr6txkqjxtqutlu0hwuer.lambda-url.us-west-2.on.aws/` |
 | Purpose | Reads S3 for dashboard polling |
 
+### AWS S3 Bucket
+| Item | Value |
+|------|-------|
+| Bucket Name | `location-manager-prod` |
+| Region | `us-west-2` |
+| Ledger Data | `processed/parsed-ledgers-detailed.json` |
+| Sync Summary | `processed/latest-sync-summary.json` |
+| Budget Data | `static/parsed-budgets.json` |
+| Location Mappings | `config/location-mappings.json` |
+
 ### Dashboard
 | Item | Value |
 |------|-------|
 | **ONLY External UI** | **This is the ONLY UI (outside Glide) for this project** |
 | Dashboard URL | `https://main.d2nhaxprh2fg8e.amplifyapp.com` |
-| Locations Page | `https://main.d2nhaxprh2fg8e.amplifyapp.com/locations` |
+| Comparison API | `https://main.d2nhaxprh2fg8e.amplifyapp.com/api/comparison` |
+| GitHub Repo | `https://github.com/neking1969/Shards_Ledger` |
+| Amplify App ID | `d2nhaxprh2fg8e` |
 
 ---
 
@@ -97,7 +112,15 @@ bash lambda/deploy.sh
 
 ---
 
-## Recent Changes (2026-02-03)
+## Recent Changes (2026-02-04)
+
+1. ✅ **Cloud-Only Architecture** - Dashboard now reads from Lambda/S3, not local files
+2. ✅ **Added /data Endpoint** - Lambda serves comparison data from S3
+3. ✅ **Budget Data in S3** - Static budget data uploaded to `static/parsed-budgets.json`
+4. ✅ **Shards-Ledger-App Updated** - `/api/comparison` fetches from Lambda
+5. ✅ **Amplify Deployment Fixed** - Added `build:production` script, synced package-lock.json
+
+### Previous Changes (2026-02-03)
 
 1. ✅ **Moved to Local Storage** - Project now at `~/Projects/Location-Manager`
 2. ✅ **Handler File Download Fixed** - `lambda/handler.js` now downloads files from URLs
@@ -114,10 +137,11 @@ bash lambda/deploy.sh
 3. **Glide URLs are temporary** - Storage URLs expire, return 403 after expiration
 4. **Episode 101+102 Block** - Accounting treats these as one block, all transactions show as "Episode 101"
 5. **Summary rows in ledgers** - Excel files have total rows that must be filtered out
+6. **Transaction-level GL accounts** - Use `transNumber` field (e.g., "6304"), not ledger-level `account` field
 
 ---
 
-## Architecture
+## Architecture (Cloud-Only)
 
 ```
 Glide App (data entry)
@@ -126,14 +150,19 @@ Make.com (relay)
   ↓ HTTP POST
 Lambda: location-manager-sync (processing ~4s)
   ↓ writes to S3
-S3 Bucket (location-manager-prod/processed/)
-  ↓
-Lambda: location-manager-sync-status (reads S3)
-  ↑ polls every 3s via Function URL
-Dashboard (Shards-Ledger-App /api/sync-status)
-  ↓ auto-refresh when detected
-User sees new data
+S3 Bucket: location-manager-prod/
+  ├── processed/parsed-ledgers-detailed.json  (ledger transactions)
+  ├── processed/latest-sync-summary.json       (sync metadata)
+  └── static/parsed-budgets.json               (budget data)
+  ↓ reads via /data endpoint
+Lambda: location-manager-sync
+  ↓ serves JSON with comparison
+Amplify: Shards-Ledger-App /api/comparison
+  ↓ caches (60s) & serves
+Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
 ```
+
+**Key Point**: The dashboard works entirely from AWS. No local files required.
 
 ---
 
@@ -143,3 +172,4 @@ User sees new data
 - **Glide** is **ONLY** for data entry (file uploads, forms)
 - **NEVER** suggest building new dashboards or UIs
 - All data display happens in Shards-Ledger-App
+- **Dashboard reads from Lambda/S3** - no local file dependencies
