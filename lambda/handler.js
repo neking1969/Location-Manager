@@ -1,11 +1,12 @@
 import { handleSync, handleApproval } from '../src/api/sync.js';
 import { downloadFile } from '../src/utils/downloadFile.js';
+import { writeJsonToS3, readJsonFromS3 } from '../src/utils/s3Utils.js';
 
 export async function handler(event, context) {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
 
@@ -44,6 +45,38 @@ export async function handler(event, context) {
       result = await handleSync(syncInput);
     } else if (path.includes('/approve')) {
       result = await handleApproval(body);
+    } else if (path.includes('/mappings')) {
+      const method = event.httpMethod || event.requestContext?.http?.method || 'POST';
+      if (method === 'GET') {
+        try {
+          const mappings = await readJsonFromS3('config/location-mappings.json');
+          result = { mappings };
+        } catch (e) {
+          result = { mappings: [] };
+        }
+      } else {
+        const existingMappings = await readJsonFromS3('config/location-mappings.json').catch(() => ({ mappings: [] }));
+        const newMappings = body.mappings || [];
+        const allMappings = [...(existingMappings.mappings || []), ...newMappings];
+
+        const uniqueMappings = allMappings.reduce((acc, m) => {
+          acc[m.ledgerLocation] = m;
+          return acc;
+        }, {});
+
+        const finalMappings = Object.values(uniqueMappings);
+        await writeJsonToS3('config/location-mappings.json', {
+          mappings: finalMappings,
+          updatedAt: new Date().toISOString()
+        });
+
+        result = {
+          success: true,
+          savedCount: newMappings.length,
+          totalMappings: finalMappings.length
+        };
+        console.log(`[Handler] Saved ${newMappings.length} new mappings, total: ${finalMappings.length}`);
+      }
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
     } else {
