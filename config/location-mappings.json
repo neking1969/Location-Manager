@@ -33,7 +33,7 @@
     {
       "ledgerLocation": "12/08 DRIVING SCENES",
       "budgetLocation": "Ext. Mullholland Drive & Ext. LA- Driving ",
-      "aliases": ["12/08 DRIVING", "DRIVING SCENES", "MULHOLLAND DRIVING", "MULLHOLLAND DRIVING"]
+      "aliases": ["12/08 DRIVING", "DRIVING SCENES", "MULHOLLAND DRIVING", "MULLHOLLAND DRIVING", "DRIVING PT.1", "DRIVING PT 1", "12/07 DRIVING DAY", "12/07 DRIVE DY"]
     },
     {
       "ledgerLocation": "MELROSE VIDEO BAR",
@@ -43,7 +43,7 @@
     {
       "ledgerLocation": "BUNGALOW",
       "budgetLocation": "West Hollywood Bungalow",
-      "aliases": ["WEHO BUNGALOW", "WH BUNGALOW", "BUNGALOW ADD'L DAY", "BUNGALOW ADDL DAY"]
+      "aliases": ["WEHO BUNGALOW", "WH BUNGALOW", "BUNGALOW ADD'L DAY", "BUNGALOW ADDL DAY", "WHLLYWD BNGLW", "WEHO BNGLW", "W HOLLYWOOD BUNGALOW"]
     },
     {
       "ledgerLocation": "BEVERLY HILLS HOUSE",
@@ -188,7 +188,7 @@
     {
       "ledgerLocation": "PARKING GARAGE",
       "budgetLocation": "3rd Floor Parking Garage (Pico Blvd)",
-      "aliases": ["PICO PARKING", "PICO GARAGE", "3RD FLOOR GARAGE", "3RD FLR PRKG", "3RD FL PARKING"]
+      "aliases": ["PICO PARKING", "PICO GARAGE", "3RD FLOOR GARAGE", "3RD FLR PRKG", "3RD FL PARKING", "RD FL PRKG"]
     },
     {
       "ledgerLocation": "RAMIREZ STREET",
@@ -198,7 +198,7 @@
     {
       "ledgerLocation": "SUBURBAN HOUSE",
       "budgetLocation": "Suburban House",
-      "aliases": ["SUBURBAN"]
+      "aliases": ["SUBURBAN", "SRBRN HSE", "SBRNBN HSE", "SUB HSE", "SUB HSE ADD'L DAY"]
     },
     {
       "ledgerLocation": "PERMITS",
@@ -213,7 +213,7 @@
     {
       "ledgerLocation": "SERVICE FEE",
       "budgetLocation": "SERVICE_CHARGE",
-      "aliases": ["SERVICE FEES", "SERVICE"]
+      "aliases": ["SERVICE FEES", "SERVICE", "SERVICE FEE -VIEW PARK", "SVC", "SVC FEE", "SVC FEES"]
     },
     {
       "ledgerLocation": "SITE REP",
@@ -303,22 +303,108 @@
     {
       "ledgerLocation": "REMOVE/RESTORE",
       "budgetLocation": "SERVICE_CHARGE",
-      "aliases": ["REMOVE RESTORE", "RESTORE"]
-    },
-    {
-      "ledgerLocation": "SVC FEE",
-      "budgetLocation": "SERVICE_CHARGE",
-      "aliases": ["SVC FEES"]
+      "aliases": ["REMOVE RESTORE", "RESTORE", "REMOVE/RESTORE FIXTURES"]
     },
     {
       "ledgerLocation": "ADD'L",
       "budgetLocation": "SERVICE_CHARGE",
       "aliases": ["ADDL", "ADDITIONAL"]
+    },
+    {
+      "ledgerLocation": "HMU STATION",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["HMU", "HAIR MAKEUP", "HMU STATION/DIR CHAIRS", "HMU STATION/DIR CHAIRS/CORDS"]
+    },
+    {
+      "ledgerLocation": "DEL/PU",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["DELIVERY", "PICKUP", "DEL PU", "DELIVERY/PICKUP"]
+    },
+    {
+      "ledgerLocation": "GARAGE BATHROOM",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "MAIN PANEL",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["ELECTRICAL PANEL", "PANEL"]
+    },
+    {
+      "ledgerLocation": "BROKEN CRUCIFIX",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "NO WEEKENDS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["WEEKENDS"]
+    },
+    {
+      "ledgerLocation": "SHERMAN WAY",
+      "budgetLocation": "PENDING:Sherman Way",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "DTLA",
+      "budgetLocation": "PENDING:Downtown LA",
+      "aliases": ["DOWNTOWN LA", "DOWNTOWN"]
+    },
+    {
+      "ledgerLocation": "PLYMOUTH BLVD",
+      "budgetLocation": "PENDING:Plymouth Blvd",
+      "aliases": ["PLYMOUTH"]
+    },
+    {
+      "ledgerLocation": "VIEW PARK",
+      "budgetLocation": "PENDING:View Park",
+      "aliases": ["ENORO VIEW PARK", "SOUTHRIDGE VIEW PRK", "ENORO DR", "ELRO VIEW PARK"]
+    },
+    {
+      "ledgerLocation": "POTRERO RD",
+      "budgetLocation": "PENDING:Potrero Rd",
+      "aliases": ["POTRERO"]
+    },
+    {
+      "ledgerLocation": "BELDEN DR",
+      "budgetLocation": "PENDING:Belden Dr",
+      "aliases": ["BELDEN"]
+    },
+    {
+      "ledgerLocation": "STANSBURY AVE",
+      "budgetLocation": "PENDING:Stansbury Ave",
+      "aliases": ["STANSBURY"]
+    },
+    {
+      "ledgerLocation": "STUDIO CITY",
+      "budgetLocation": "PENDING:Studio City",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "POOL PARTY HOUSE",
+      "budgetLocation": "PENDING:Pool Party House",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "UCLA",
+      "budgetLocation": "PENDING:UCLA",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "THOUSAND OAKS",
+      "budgetLocation": "PENDING:Thousand Oaks",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "BROOKFIELD FARMS",
+      "budgetLocation": "PENDING:Brookfield Farms",
+      "aliases": []
     }
   ],
   "notes": {
     "SERVICE_CHARGE": "Production overhead services not tied to specific locations - excluded from budget comparison",
+    "PENDING": "New locations that need to be added to Glide Budgets and Master Locations tables",
     "updated": "2026-02-04",
-    "version": "2.0"
+    "version": "2.1"
   }
 }
