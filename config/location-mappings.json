@@ -33,12 +33,12 @@
     {
       "ledgerLocation": "12/08 DRIVING SCENES",
       "budgetLocation": "Ext. Mullholland Drive & Ext. LA- Driving ",
-      "aliases": ["12/08 DRIVING", "DRIVING SCENES", "MULHOLLAND DRIVING", "MULLHOLLAND DRIVING", "DRIVING PT.1", "DRIVING PT 1", "12/07 DRIVING DAY", "12/07 DRIVE DY"]
+      "aliases": ["12/08 DRIVING", "DRIVING SCENES", "MULHOLLAND DRIVING", "MULLHOLLAND DRIVING", "DRIVING PT.1", "DRIVING PT 1", "12/07 DRIVING DAY", "12/07 DRIVE DY", "12/7 DRIVING DAY", "12/7 DRIVE DY", "DRIVING DAY"]
     },
     {
       "ledgerLocation": "MELROSE VIDEO BAR",
       "budgetLocation": "Ext. Melrose Video Bar",
-      "aliases": ["MELROSE BAR", "MLROSE BAR", "MLROSE BAR(102", "MELROSE VIDEO", "EXT MELROSE", "EXT. MELROSE AVE.", "MELRSE VID BR", "MELROSE/ASYLUM", "ASYLUM/MELROSE VIDEO BAR BA", "ASYLUM/VIDEO BAR", "MELRSE VID BAR"]
+      "aliases": ["MELROSE BAR", "MLROSE BAR", "MLROSE BAR(102", "MELROSE VIDEO", "EXT MELROSE", "EXT. MELROSE AVE.", "MELRSE VID BR", "MELROSE/ASYLUM", "ASYLUM/MELROSE VIDEO BAR BA", "ASYLUM/VIDEO BAR", "MELRSE VID BAR", "MLROSE BAR(102)"]
     },
     {
       "ledgerLocation": "BUNGALOW",
@@ -358,7 +358,7 @@
     {
       "ledgerLocation": "VIEW PARK",
       "budgetLocation": "PENDING:View Park",
-      "aliases": ["ENORO VIEW PARK", "SOUTHRIDGE VIEW PRK", "ENORO DR", "ELRO VIEW PARK"]
+      "aliases": ["ENORO VIEW PARK", "SOUTHRIDGE VIEW PRK", "ENORO DR", "ELRO VIEW PARK", "VIEW PRK", "VIEWPARK"]
     },
     {
       "ledgerLocation": "POTRERO RD",
@@ -399,12 +399,37 @@
       "ledgerLocation": "BROOKFIELD FARMS",
       "budgetLocation": "PENDING:Brookfield Farms",
       "aliases": []
+    },
+    {
+      "ledgerLocation": "POLICE STATION",
+      "budgetLocation": "PENDING:Police Station",
+      "aliases": ["POLICE STATION ", "POLICE STA"]
+    },
+    {
+      "ledgerLocation": "W ADAMS",
+      "budgetLocation": "PENDING:W Adams",
+      "aliases": ["W ADAMS BLVD", "WEST ADAMS"]
+    },
+    {
+      "ledgerLocation": "SAN FERNANDO RD",
+      "budgetLocation": "PENDING:San Fernando Rd",
+      "aliases": ["SAN FERNANDO", "SAN FERNANDO ROAD"]
+    },
+    {
+      "ledgerLocation": "STARS MAKEUP ROOM",
+      "budgetLocation": "PENDING:Stars Makeup Room",
+      "aliases": ["STARS MAKEUP", "MAKEUP ROOM"]
+    },
+    {
+      "ledgerLocation": "GLOBUG",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["GLOBUGS"]
     }
   ],
   "notes": {
     "SERVICE_CHARGE": "Production overhead services not tied to specific locations - excluded from budget comparison",
     "PENDING": "New locations that need to be added to Glide Budgets and Master Locations tables",
-    "updated": "2026-02-04",
-    "version": "2.1"
+    "updated": "2026-02-06",
+    "version": "2.3"
   }
 }

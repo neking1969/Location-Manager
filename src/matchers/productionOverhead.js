@@ -18,7 +18,7 @@ const PAYROLL_PATTERNS = [
   /MEAL\s*PENALTY/i,
   /KIT\s*RENTAL/i,
   /BOX\s*RENTAL/i,
-  /CAR\s*ALLOWANCE/i,
+  /\w+\s*ALLOWANCE/i,
   /MILEAGE/i,
   /PER\s*DIEM/i,
   /HOLIDAY\s*PAY/i,
@@ -50,7 +50,7 @@ const OVERHEAD_DESCRIPTION_PATTERNS = [
 /**
  * Check if a transaction is payroll
  */
-function isPayrollTransaction(txn) {
+export function isPayrollTransaction(txn) {
   const desc = (txn.description || '').toUpperCase();
   const vendor = (txn.vendor || '').toUpperCase();
 
@@ -99,26 +99,35 @@ export function categorizeProductionOverhead(parsedLedgers) {
 
   for (const ledger of parsedLedgers.ledgers || []) {
     for (const txn of ledger.transactions || []) {
-      if (txn.inferredLocation || txn.location) continue;
-
       stats.totalChecked++;
       const amount = Math.abs(txn.amount || 0);
 
+      // ALWAYS check for payroll first - even if location was inferred
+      // This fixes the bug where payroll was incorrectly assigned to locations like "FLSAOT"
       if (isPayrollTransaction(txn)) {
         txn.category = 'production_overhead';
         txn.overheadType = 'payroll';
         txn.locationRequired = false;
+        // Clear any incorrectly inferred location
+        if (txn.inferredLocation) {
+          txn.inferredLocation = null;
+          txn.location = null;
+          txn.locationSource = 'payroll';
+        }
         stats.payroll++;
         stats.payrollAmount += amount;
-      } else if (isOverheadTransaction(txn)) {
-        txn.category = 'production_overhead';
-        txn.overheadType = 'general_overhead';
-        txn.locationRequired = false;
-        stats.overhead++;
-        stats.overheadAmount += amount;
-      } else {
-        stats.stillUnmatched++;
-        stats.unmatchedAmount += amount;
+      } else if (!txn.inferredLocation && !txn.location) {
+        // Only check for generic overhead if no location
+        if (isOverheadTransaction(txn)) {
+          txn.category = 'production_overhead';
+          txn.overheadType = 'general_overhead';
+          txn.locationRequired = false;
+          stats.overhead++;
+          stats.overheadAmount += amount;
+        } else {
+          stats.stillUnmatched++;
+          stats.unmatchedAmount += amount;
+        }
       }
     }
   }

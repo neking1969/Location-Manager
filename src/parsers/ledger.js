@@ -156,6 +156,37 @@ function extractLocationFromDescription(description) {
   ];
   if (categoryOnly.includes(desc)) return '';
 
+  // Known non-location strings - service descriptions, equipment, activity types
+  // If the parser extracts one of these, it should return empty so Lambda's
+  // date/vendor inference can attribute the spend to the correct location
+  const notALocation = new Set([
+    'SITE REP/REPAIRS', 'SITE REPAIRS', 'REPAIRS',
+    'REPROG DISCO BALLS', 'DISCO BALLS',
+    'BROKEN CRUCIFIX', 'MAIN PANEL', 'ELECTRICAL PANEL', 'POWER/BREAKER',
+    'REMOVE/RESTORE FIXTURES', 'REMOVE/INSTALL', 'REMOVE/RESTORE',
+    'NO WEEKENDS', 'GARAGE BATHROOM',
+    "ADD'L", 'ADDL', 'ADDITIONAL',
+    'SVC FEE', 'SVC FEES', 'DAY/SVC FEE', 'DAY/SVC FEES', 'SERVICE FEE',
+    'FXTURES', 'FIXTURES', 'SET-UP', 'SETUP', 'TENTS SET-UP',
+    'STGNG', 'STAGING', 'EQUIP STGNG', 'EQUIP STAGING',
+    'VALIDATIONS', 'PARKING VALIDATIONS',
+    'SPPLYS', 'SUPPLIES', 'CLEANING SPPLYS', 'CLEANING SUPPLIES',
+    'POWER WAS', 'POWER WASH', 'POWERWASH',
+    'GLOBUG', 'GLOBUGS', 'REINSTALL', 'REMOVAL/REINSTALL',
+    'BANNER REMOVAL', 'BANNER REINSTALL',
+    'SAFETY OFFICER', 'FIRE SAFETY OFFICER',
+    'CLOSEOUT INV', 'FINAL INVOICE', 'REINSTATEMENT',
+    'PERMIT SERVICE FEE', '12 TON PORTABLE AC',
+    'PERMIT SVC', 'PERMIT SVC FEE',
+    'FINAL', 'SITE REP'
+  ]);
+
+  const isNotLocation = (str) => {
+    if (!str) return true;
+    const upper = str.toUpperCase().trim();
+    return notALocation.has(upper);
+  };
+
   // Known service companies that should NOT be treated as locations
   // Use word boundaries to avoid false matches (e.g., "SITE REP" contains "EP")
   const serviceCompanyPatterns = [
@@ -180,7 +211,7 @@ function extractLocationFromDescription(description) {
     /^MEAL\s*PENALTY/i,
     /^KIT\s*RENTAL/i,
     /^BOX\s*RENTAL/i,
-    /^CAR\s*ALLOWANCE/i,
+    /\w+\s*ALLOWANCE/i,
     /^MILEAGE/i,
     /^PER\s*DIEM/i,
     /^HOLIDAY\s*PAY/i,
@@ -215,7 +246,7 @@ function extractLocationFromDescription(description) {
   const quotedMatch = desc.match(/["']([A-Z][A-Z0-9\s\-\'\.]+)["']/);
   if (quotedMatch) {
     const loc = cleanLocation(quotedMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -225,7 +256,7 @@ function extractLocationFromDescription(description) {
   const locFeeMatch = desc.match(/(\d+\/\d+[\-\/]?\d*\s+)?([A-Z][A-Z0-9\s\-\'\.]+?)\s+(?:LOCATION\s+FEE|LOC\s+FEE)/i);
   if (locFeeMatch) {
     const loc = cleanLocation(locFeeMatch[2]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -236,7 +267,7 @@ function extractLocationFromDescription(description) {
   const cleaningMatch = desc.match(/(\d+\/\d+[\-\/]?\d*\s+)?([A-Z][A-Z0-9\s\-\'\.]+?)\s+(?:DEEP\s+CLEAN|CLEANING)/i);
   if (cleaningMatch) {
     const loc = cleanLocation(cleaningMatch[2]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -245,7 +276,7 @@ function extractLocationFromDescription(description) {
   const inconFeeMatch = desc.match(/INCON(?:VENIENCE)?\s+FEE[:\s]+["']?([A-Z][A-Z0-9\s\-\'\.]+?)["']?(?:\s*\(|$)/i);
   if (inconFeeMatch) {
     const loc = cleanLocation(inconFeeMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -255,7 +286,7 @@ function extractLocationFromDescription(description) {
   const siteRepCompoundMatch = desc.match(/(?:SITE\s*REP|EXTRA\s*PREP\s*DAY|PREP\s*DAY)[^:]*:\s*([A-Z0-9][A-Z0-9\s\-\'\.]+)/i);
   if (siteRepCompoundMatch) {
     const loc = cleanLocation(siteRepCompoundMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -264,7 +295,7 @@ function extractLocationFromDescription(description) {
   const parkingMatch = desc.match(/(?:VIP\s+)?(?:PARKING|BASECAMP)[:\s]+["']?([A-Z][A-Z0-9\s\-\'\.]+?)["']?(?:\s*\(|$)/i);
   if (parkingMatch) {
     const loc = cleanLocation(parkingMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -273,7 +304,7 @@ function extractLocationFromDescription(description) {
   const crewMatch = desc.match(/(?:PREP|STRK|CREW|PRKG)[\/\w\s]*[:\s]+([A-Z][A-Z0-9\s\-\'\.]+?)(?:\s*\(|$)/i);
   if (crewMatch) {
     const loc = cleanLocation(crewMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -284,7 +315,7 @@ function extractLocationFromDescription(description) {
   const colonMatch = desc.match(/:\s*(?:I\/E\s+)?([A-Z0-9][A-Z0-9\s\-\'\.\/]+?)(?:\s*\(\d+\))?$/i);
   if (colonMatch) {
     const loc = cleanLocation(colonMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -296,7 +327,7 @@ function extractLocationFromDescription(description) {
     if (beforeSvcMatch) {
       let loc = beforeSvcMatch[1].trim();
       loc = loc.replace(/^\d+\/\d+[\-\/]?\d*\s+/, '').trim();
-      if (loc && loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+      if (loc && loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
         return cleanLocation(loc);
       }
     }
@@ -306,7 +337,7 @@ function extractLocationFromDescription(description) {
   const dashMatch = desc.match(/(?:PERMIT|FEE|FILMING|LOCATION)\s*-\s*([A-Z][A-Z0-9\s\'\.]+)$/);
   if (dashMatch) {
     const loc = cleanLocation(dashMatch[1]);
-    if (!isPayType(loc)) {
+    if (!isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -315,7 +346,7 @@ function extractLocationFromDescription(description) {
   const atMatch = desc.match(/(?:at|@)\s+([A-Z][A-Z0-9\s\-\'\.]+)/i);
   if (atMatch) {
     const loc = cleanLocation(atMatch[1]);
-    if (!isPayType(loc)) {
+    if (!isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -325,7 +356,7 @@ function extractLocationFromDescription(description) {
   const bgHoldMatch = desc.match(/(?:BG\s*HOLD|BLOCK\s*DRVWAY|DRIVEWAY)[^:]*:\s*([A-Z][A-Z0-9\s\-\'\.]+)/i);
   if (bgHoldMatch) {
     const loc = cleanLocation(bgHoldMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -335,7 +366,7 @@ function extractLocationFromDescription(description) {
   if (permitsMatch) {
     const loc = cleanLocation(permitsMatch[1]);
     // Only return if it's not just "FIRE" or another service
-    if (loc.length > 3 && !categoryOnly.includes(loc) && !isPayType(loc) && !/^FIRE$/i.test(loc)) {
+    if (loc.length > 3 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc) && !/^FIRE$/i.test(loc)) {
       return loc;
     }
   }
@@ -344,7 +375,7 @@ function extractLocationFromDescription(description) {
   const ambassadorMatch = desc.match(/(?:AMBASSADORS?|TENTS?|TABLES?|CHAIRS?|DUMPSTERS?)[^:]*:\s*([A-Z][A-Z0-9\s\-\'\.]+)/i);
   if (ambassadorMatch) {
     const loc = cleanLocation(ambassadorMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -355,7 +386,7 @@ function extractLocationFromDescription(description) {
   if (invoiceMatch && invoiceMatch[2]) {
     const potentialLoc = cleanLocation(invoiceMatch[2]);
     // Only return if it's a known location-ish word (like DRIVING, BASECAMP, etc.)
-    if (potentialLoc.length > 3 && !categoryOnly.includes(potentialLoc) && !isPayType(potentialLoc)) {
+    if (potentialLoc.length > 3 && !categoryOnly.includes(potentialLoc) && !isPayType(potentialLoc) && !isNotLocation(potentialLoc)) {
       return potentialLoc;
     }
   }
@@ -378,7 +409,7 @@ function extractLocationFromDescription(description) {
   const serviceWithLocMatch = desc.match(/\d+\/\d+[\/\-\d]*\s+(?:PERMITS?|FIRE|GUARDS?|POLICE|MEDIC)[\s\(\d\)]*[\"']?([A-Z][A-Z0-9\s\-\'\.]+)/i);
   if (serviceWithLocMatch) {
     const loc = cleanLocation(serviceWithLocMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
       return loc;
     }
   }
@@ -386,13 +417,25 @@ function extractLocationFromDescription(description) {
   // PATTERN 19: CLEANING SERVICE, HMU STATION, etc. - production overhead
   const equipmentServiceMatch = desc.match(/\d+\/\d+[\/\-\d]*\s+(CLEANING\s*SERVICE|HMU\s*STATION|DIR\s*CHAIRS|TENTS|TABLES|CHAIRS|DUMPSTERS?|MAPS?|PERMIT\s*SVC|AIR\s*QUALITY|REMOVE\/RESTORE|DEL\/PU|SITE\s*REP)/i);
   if (equipmentServiceMatch) {
-    return equipmentServiceMatch[1].toUpperCase().replace(/\s+/g, ' ').trim();
+    const svc = equipmentServiceMatch[1].toUpperCase().replace(/\s+/g, ' ').trim();
+    if (!isNotLocation(svc)) return svc;
   }
 
   // PATTERN 20: Generic production items - TENTS/TABLES/CHAIRS, DUMPSTERS, etc.
   const genericProdMatch = desc.match(/\d+\/\d+[\/\-\d]*\s+[\d\)]*\s*(TENTS?\/TABLES?\/CHAIRS?|DUMPSTERS?\/CIG\s*CANS?|HMU\s*STATION\/DIR\s*CHAIRS)/i);
   if (genericProdMatch) {
     return genericProdMatch[1].toUpperCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // PATTERN 21: LOCATION_NAME followed by DATE_RANGE (no prefix/keyword)
+  // "VILLAGE THEATER 12/15-12/16" -> VILLAGE THEATER
+  // "LATCHFORD HOUSE 11/14-11/21" -> LATCHFORD HOUSE
+  const locationThenDateMatch = desc.match(/^([A-Z][A-Z0-9\s\-\'\.]+?)\s+\d{1,2}\/\d{1,2}[\-\/]?\d*/);
+  if (locationThenDateMatch) {
+    const loc = cleanLocation(locationThenDateMatch[1]);
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
+      return loc;
+    }
   }
 
   return '';

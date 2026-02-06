@@ -1,4 +1,17 @@
-import { writeJsonToS3, uploadFileToS3 } from './s3Utils.js';
+import { writeJsonToS3, readJsonFromS3, uploadFileToS3 } from './s3Utils.js';
+
+function mergeLedgers(existingLedgers, newLedgers) {
+  const merged = new Map();
+  for (const ledger of existingLedgers) {
+    const key = `${ledger.episode}-${ledger.account}`;
+    merged.set(key, ledger);
+  }
+  for (const ledger of newLedgers) {
+    const key = `${ledger.episode}-${ledger.account}`;
+    merged.set(key, ledger);
+  }
+  return Array.from(merged.values());
+}
 
 /**
  * Write processed ledger data to S3
@@ -42,26 +55,39 @@ export async function writeProcessedLedger(results, sessionInfo, originalFiles =
       console.log(`[Write] Archived SmartPO to S3: ${archiveKey}`);
     }
 
-    // 3. Write parsed-ledgers-detailed.json to S3
+    // 3. Read existing ledgers from S3, merge with new, then write
+    const parsedLedgersKey = 'processed/parsed-ledgers-detailed.json';
+    let existingLedgers = [];
+    try {
+      const existing = await readJsonFromS3(parsedLedgersKey);
+      existingLedgers = existing.ledgers || [];
+      console.log(`[Write] Read ${existingLedgers.length} existing ledgers from S3`);
+    } catch (e) {
+      console.log(`[Write] No existing ledgers in S3 (first sync or reset)`);
+    }
+
+    const newLedgers = results.ledgers?.ledgers || [];
+    const mergedLedgers = mergeLedgers(existingLedgers, newLedgers);
+    console.log(`[Write] Merged: ${existingLedgers.length} existing + ${newLedgers.length} new = ${mergedLedgers.length} total ledgers`);
+
     const detailedData = {
-      totalFiles: results.ledgers?.totalFiles || 0,
-      totalLineItems: results.ledgers?.ledgers?.reduce((sum, l) =>
-        sum + (l.transactionCount || 0), 0) || 0,
-      grandTotal: results.ledgers?.ledgers?.reduce((sum, l) => {
-        const ledgerTotal = l.lineItems?.reduce((itemSum, item) =>
+      totalFiles: mergedLedgers.length,
+      totalLineItems: mergedLedgers.reduce((sum, l) =>
+        sum + (l.transactionCount || 0), 0),
+      grandTotal: mergedLedgers.reduce((sum, l) => {
+        const ledgerTotal = l.transactions?.reduce((itemSum, item) =>
           itemSum + (item.amount || 0), 0) || 0;
         return sum + ledgerTotal;
-      }, 0) || 0,
-      ledgers: results.ledgers?.ledgers || [],
+      }, 0),
+      ledgers: mergedLedgers,
       lastUpdated: timestamp,
       syncSessionId: sessionInfo.syncSessionId,
       sessionName: sessionInfo.sessionName
     };
 
-    const parsedLedgersKey = 'processed/parsed-ledgers-detailed.json';
     await writeJsonToS3(parsedLedgersKey, detailedData);
     writtenPaths.parsedLedgers = { key: parsedLedgersKey };
-    console.log(`[Write] Wrote parsed ledgers: ${detailedData.totalLineItems} transactions, $${detailedData.grandTotal.toFixed(2)} total`);
+    console.log(`[Write] Wrote merged ledgers: ${detailedData.totalLineItems} transactions, $${detailedData.grandTotal.toFixed(2)} total`);
 
     // 4. Write processing queue entry
     const queueKey = `queues/weekly-sync-${Date.now()}.json`;
@@ -106,6 +132,22 @@ export async function writeProcessedLedger(results, sessionInfo, originalFiles =
     await writeJsonToS3(summaryKey, latestSummary);
     writtenPaths.latestSummary = { key: summaryKey };
     console.log(`[Write] Updated latest summary`);
+
+    // 6. Write parsed SmartPO data to S3 (if available)
+    if (results.smartpo && results.smartpo.purchaseOrders?.length > 0) {
+      const smartpoKey = 'processed/parsed-smartpo.json';
+      const smartpoData = {
+        purchaseOrders: results.smartpo.purchaseOrders,
+        totalPOs: results.smartpo.totalPOs || results.smartpo.purchaseOrders.length,
+        totalAmount: results.smartpo.totalAmount || 0,
+        byStatus: results.smartpo.byStatus || {},
+        lastUpdated: timestamp,
+        syncSessionId: sessionInfo.syncSessionId
+      };
+      await writeJsonToS3(smartpoKey, smartpoData);
+      writtenPaths.parsedSmartPO = { key: smartpoKey };
+      console.log(`[Write] Wrote parsed SmartPO: ${smartpoData.totalPOs} POs, $${smartpoData.totalAmount.toFixed(2)} total`);
+    }
 
     console.log(`[Write] S3 write complete - ${Object.keys(writtenPaths).length} files written`);
 

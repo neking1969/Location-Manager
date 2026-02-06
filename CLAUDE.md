@@ -112,21 +112,21 @@ bash lambda/deploy.sh
 
 ---
 
-## Recent Changes (2026-02-04)
+## Recent Changes (2026-02-05)
 
-1. ✅ **Cloud-Only Architecture** - Dashboard now reads from Lambda/S3, not local files
+1. ✅ **Category Breakdown per Location** - `byCategory` field on each location (Loc Fees, Security, Fire, Police, Rentals, Permits, Parking, Other)
+2. ✅ **GL Account Mapping** - 6304→Security, 6305→Police, 6307→Fire, 6342→Loc Fees
+3. ✅ **Deposit Detection** - Lambda identifies refundable deposits from transaction descriptions
+4. ✅ **Financial Breakdown Cards** - Summary UI: Invoiced, Deposits, Open POs, Total Committed, Remaining
+5. ✅ **Episodes 101/102 Combined** - Single block in dashboard matching EP Accounting
+6. ⏳ **Pending GL Codes** - Need Rentals, Permits, Parking GL codes from EP Accounting
+
+### Previous Changes (2026-02-04)
+
+1. ✅ **Cloud-Only Architecture** - Dashboard reads from Lambda/S3, not local files
 2. ✅ **Added /data Endpoint** - Lambda serves comparison data from S3
-3. ✅ **Budget Data in S3** - Static budget data uploaded to `static/parsed-budgets.json`
-4. ✅ **Shards-Ledger-App Updated** - `/api/comparison` fetches from Lambda
-5. ✅ **Amplify Deployment Fixed** - Added `build:production` script, synced package-lock.json
-
-### Previous Changes (2026-02-03)
-
-1. ✅ **Moved to Local Storage** - Project now at `~/Projects/Location-Manager`
-2. ✅ **Handler File Download Fixed** - `lambda/handler.js` now downloads files from URLs
-3. ✅ **Multi-Pass Location Inference** - dates → vendor → episode primary → overhead
-4. ✅ **Payroll Date Pattern** - Recognizes `MM/DD/YY :` format
-5. ✅ **Git Repository Initialized** - Version control enabled
+3. ✅ **Expanded Location Mappings** - 80+ aliases, SERVICE_CHARGE patterns, PENDING locations
+4. ✅ **Location Review UI** - `/locations/review` page for unmapped location categorization
 
 ---
 

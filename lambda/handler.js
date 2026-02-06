@@ -99,7 +99,40 @@ function stringSimilarity(s1, s2) {
   return (2 * intersectionSize) / (s1.length + s2.length - 2);
 }
 
-// Location name aliases for known spelling variations
+// Build dynamic alias lookup from location-mappings.json
+// Maps: alias/ledgerLocation (lowercase) → budgetLocation
+function buildAliasLookup(mappings) {
+  const lookup = new Map();
+  const serviceChargePatterns = [];
+  const pendingLocations = new Map();
+
+  for (const m of mappings || []) {
+    const ledgerLoc = (m.ledgerLocation || '').toLowerCase().trim();
+    const budgetLoc = m.budgetLocation || '';
+
+    if (budgetLoc === 'SERVICE_CHARGE') {
+      serviceChargePatterns.push(ledgerLoc);
+      for (const alias of m.aliases || []) {
+        serviceChargePatterns.push(alias.toLowerCase().trim());
+      }
+    } else if (budgetLoc.startsWith('PENDING:')) {
+      const pendingName = budgetLoc.replace('PENDING:', '');
+      pendingLocations.set(ledgerLoc, pendingName);
+      for (const alias of m.aliases || []) {
+        pendingLocations.set(alias.toLowerCase().trim(), pendingName);
+      }
+    } else {
+      lookup.set(ledgerLoc, budgetLoc);
+      for (const alias of m.aliases || []) {
+        lookup.set(alias.toLowerCase().trim(), budgetLoc);
+      }
+    }
+  }
+
+  return { lookup, serviceChargePatterns, pendingLocations };
+}
+
+// Fallback hardcoded aliases for basic typo correction
 const LOCATION_ALIASES = {
   'kellner': 'keller',
   'kellners': 'keller',
@@ -150,9 +183,27 @@ function extractDescriptionKeyword(description) {
 
 // Find best budget match for an actual location name
 // txnContext is optional - if provided, will also try matching from description
-function findBestBudgetMatch(actualName, budgetByLocation, threshold = 0.5, txnContext = null) {
+// aliasLookup is optional - mapping from alias/ledgerLocation → budgetLocation
+function findBestBudgetMatch(actualName, budgetByLocation, threshold = 0.5, txnContext = null, aliasLookup = null) {
   const actualKey = actualName.toLowerCase().trim();
   const actualKeyAliased = applyAliases(actualKey);
+
+  // PRIORITY 1: Try S3 alias lookup first (most authoritative)
+  if (aliasLookup?.lookup) {
+    const mappedBudget = aliasLookup.lookup.get(actualKey);
+    if (mappedBudget) {
+      const mappedKey = mappedBudget.toLowerCase().trim();
+      if (budgetByLocation.has(mappedKey)) {
+        return { budget: budgetByLocation.get(mappedKey), confidence: 0.98, matchType: 's3-mapping' };
+      }
+      // Budget location from mapping might have slight variations - try fuzzy within budgets
+      for (const [budgetKey, budget] of budgetByLocation) {
+        if (stringSimilarity(mappedKey, budgetKey) > 0.8) {
+          return { budget, confidence: 0.95, matchType: 's3-mapping-fuzzy' };
+        }
+      }
+    }
+  }
 
   // Try exact match first (with alias normalization)
   if (budgetByLocation.has(actualKey)) {
@@ -251,7 +302,19 @@ function findBestBudgetMatch(actualName, budgetByLocation, threshold = 0.5, txnC
   return bestMatch;
 }
 
-function generateLocationComparison(budgets, ledgers) {
+function generateLocationComparison(budgets, ledgers, locationMappings = null, smartpo = null) {
+  // Build alias lookup from S3 mappings
+  const aliasData = buildAliasLookup(locationMappings?.mappings);
+  const { lookup: aliasLookup, serviceChargePatterns, pendingLocations } = aliasData;
+  console.log(`[Handler] Loaded ${aliasLookup.size} aliases, ${serviceChargePatterns.length} service patterns, ${pendingLocations.size} pending locations`);
+  console.log(`[Handler] SmartPO data: ${smartpo?.totalPOs || 0} POs, $${(smartpo?.totalAmount || 0).toFixed(2)} total`);
+
+  // Check if location is a service charge
+  function isServiceCharge(name) {
+    if (!name) return false;
+    const normalized = name.toLowerCase().trim();
+    return serviceChargePatterns.some(p => normalized.includes(p) || p.includes(normalized));
+  }
   // Build budget lookup by location name (case-insensitive)
   const budgetByLocation = new Map();
   for (const item of budgets.byLocationEpisode || []) {
@@ -279,10 +342,12 @@ function generateLocationComparison(budgets, ledgers) {
   }
 
   // Group transactions by matchedLocation
-  // Track payroll/overhead separately
+  // Track payroll/overhead and service charges separately
   const actualsByLocation = new Map();
   let payrollTotal = 0;
   let payrollCount = 0;
+  let serviceChargeTotal = 0;
+  let serviceChargeCount = 0;
   let descriptionOverrides = 0;
 
   for (const ledger of ledgers.ledgers || []) {
@@ -306,6 +371,14 @@ function generateLocationComparison(budgets, ledgers) {
       }
 
       if (!locName) continue;
+
+      // Check if this is a service charge (skip from location matching)
+      if (isServiceCharge(locName)) {
+        serviceChargeTotal += Math.abs(tx.amount || 0);
+        serviceChargeCount++;
+        continue;
+      }
+
       const key = locName.toLowerCase().trim();
       if (!actualsByLocation.has(key)) {
         actualsByLocation.set(key, { locationName: locName, totalAmount: 0, transactions: [] });
@@ -319,11 +392,14 @@ function generateLocationComparison(budgets, ledgers) {
         matchedToBudget: tx.matchedLocation,
         description: tx.description,
         category: tx.category,
-        episode: tx.episode
+        episode: tx.episode,
+        // GL account for category breakdown
+        transNumber: tx.transNumber,
+        glAccount: tx.transNumber?.substring(0, 4)
       });
     }
   }
-  console.log(`[Handler] Description keyword overrides: ${descriptionOverrides}`);
+  console.log(`[Handler] Description keyword overrides: ${descriptionOverrides}, service charges skipped: ${serviceChargeCount}`);
 
   // Classify into budgeted vs unmapped
   // Aggregate actuals by matched budget location
@@ -334,7 +410,7 @@ function generateLocationComparison(budgets, ledgers) {
   for (const [key, actuals] of actualsByLocation) {
     // Pass first transaction as context for description-based matching
     const txnContext = actuals.transactions[0] || null;
-    const match = findBestBudgetMatch(actuals.locationName, budgetByLocation, 0.5, txnContext);
+    const match = findBestBudgetMatch(actuals.locationName, budgetByLocation, 0.5, txnContext, aliasData);
 
     if (match) {
       const budget = match.budget;
@@ -357,13 +433,26 @@ function generateLocationComparison(budgets, ledgers) {
       entry.transactions.push(...actuals.transactions);
       entry.matchTypes.add(match.matchType);
     } else {
-      unmappedLocations.push({
-        locationName: actuals.locationName,
-        totalAmount: actuals.totalAmount,
-        transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'no_budget_match' })),
-        reason: 'no_budget_match',
-        reasonLabel: 'No budget entry found'
-      });
+      // Check if this is a PENDING location (known but not yet in Glide)
+      const pendingName = pendingLocations.get(key);
+      if (pendingName) {
+        unmappedLocations.push({
+          locationName: actuals.locationName,
+          totalAmount: actuals.totalAmount,
+          transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'pending_location' })),
+          reason: 'pending_location',
+          reasonLabel: `Pending: ${pendingName}`,
+          pendingName: pendingName
+        });
+      } else {
+        unmappedLocations.push({
+          locationName: actuals.locationName,
+          totalAmount: actuals.totalAmount,
+          transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'no_budget_match' })),
+          reason: 'no_budget_match',
+          reasonLabel: 'No budget entry found'
+        });
+      }
     }
   }
 
@@ -371,8 +460,55 @@ function generateLocationComparison(budgets, ledgers) {
   const budgetedLocations = [];
   const processedBudgetKeys = new Set(budgetedMap.keys());
 
+  // GL account to category mapping for breakdown
+  const glToCategory = {
+    '6304': 'Security',
+    '6305': 'Police',
+    '6307': 'Fire',
+    '6342': 'Loc Fees'
+  };
+
+  // Calculate category breakdown from transactions
+  function calculateCategoryBreakdown(transactions) {
+    const breakdown = {
+      'Loc Fees': 0,
+      'Security': 0,
+      'Fire': 0,
+      'Rentals': 0,
+      'Permits': 0,
+      'Police': 0,
+      'Parking': 0,
+      'Other': 0
+    };
+
+    for (const tx of transactions || []) {
+      const glAccount = (tx.glAccount || tx.transNumber || '').substring(0, 4);
+      const category = glToCategory[glAccount];
+
+      if (category) {
+        breakdown[category] += Math.abs(tx.amount || 0);
+      } else {
+        // Try to infer from description
+        const desc = (tx.description || '').toUpperCase();
+        if (desc.includes('RENTAL') || desc.includes('EQUIPMENT')) {
+          breakdown['Rentals'] += Math.abs(tx.amount || 0);
+        } else if (desc.includes('PERMIT')) {
+          breakdown['Permits'] += Math.abs(tx.amount || 0);
+        } else if (desc.includes('PARKING') || desc.includes('PRKG')) {
+          breakdown['Parking'] += Math.abs(tx.amount || 0);
+        } else {
+          breakdown['Other'] += Math.abs(tx.amount || 0);
+        }
+      }
+    }
+
+    return breakdown;
+  }
+
   for (const [key, entry] of budgetedMap) {
     const variance = entry.budgetAmount - entry.actualAmount;
+    const categoryBreakdown = calculateCategoryBreakdown(entry.transactions);
+
     budgetedLocations.push({
       locationName: entry.locationName,
       matchedNames: entry.matchedNames,
@@ -384,7 +520,9 @@ function generateLocationComparison(budgets, ledgers) {
       hasActuals: true,
       transactionCount: entry.transactions.length,
       matchTypes: Array.from(entry.matchTypes),
-      transactions: entry.transactions
+      transactions: entry.transactions,
+      // Category breakdown matching Kirsten's spreadsheet
+      byCategory: categoryBreakdown
     });
   }
 
@@ -407,7 +545,47 @@ function generateLocationComparison(budgets, ledgers) {
     }
   }
 
-  // Calculate summary
+  // Detect refundable deposits from transactions
+  function isDeposit(tx) {
+    const desc = (tx.description || '').toLowerCase();
+    return desc.includes('deposit') ||
+           desc.includes('refundable') ||
+           desc.includes('security deposit') ||
+           desc.includes('damage deposit');
+  }
+
+  // Calculate deposits from all transactions
+  let totalDeposits = 0;
+  let depositCount = 0;
+  const depositTransactions = [];
+
+  for (const loc of budgetedLocations) {
+    for (const tx of loc.transactions || []) {
+      if (isDeposit(tx)) {
+        totalDeposits += Math.abs(tx.amount || 0);
+        depositCount++;
+        depositTransactions.push({
+          location: loc.locationName,
+          amount: tx.amount,
+          description: tx.description,
+          vendor: tx.vendor
+        });
+      }
+    }
+  }
+  console.log(`[Handler] Found ${depositCount} deposits totaling $${totalDeposits.toFixed(2)}`);
+
+  // Calculate PO totals by status
+  const openPOStatuses = ['pending', 'approved', 'open', 'submitted'];
+  const openPOs = (smartpo?.purchaseOrders || []).filter(po => {
+    const status = (po.status || '').toLowerCase();
+    return openPOStatuses.some(s => status.includes(s)) || !po.status;
+  });
+  const totalOpenPOAmount = openPOs.reduce((sum, po) => sum + (po.amount || 0), 0);
+
+  // Calculate summary - deposits are INCLUDED in invoiced (they're paid out)
+  // but tracked separately for visibility (they're refundable at wrap)
+  const invoicedAmount = budgetedLocations.reduce((sum, l) => sum + l.actualAmount, 0);
   const summary = {
     totalBudget: budgetedLocations.reduce((sum, l) => sum + l.budgetAmount, 0),
     totalActual: budgetedLocations.reduce((sum, l) => sum + l.actualAmount, 0),
@@ -416,14 +594,41 @@ function generateLocationComparison(budgets, ledgers) {
     locationsWithBudget: budgetByLocation.size,
     locationsWithActuals: budgetedLocations.filter(l => l.hasActuals).length,
     locationsOverBudget: budgetedLocations.filter(l => l.isOverBudget).length,
-    unmappedTransactionCount: unmappedLocations.reduce((sum, l) => sum + l.transactions.length, 0)
+    unmappedTransactionCount: unmappedLocations.reduce((sum, l) => sum + l.transactions.length, 0),
+    // Financial breakdown (Kirsten's methodology)
+    invoiced: invoicedAmount,
+    openPOs: totalOpenPOAmount,
+    totalCommitted: invoicedAmount + totalOpenPOAmount,
+    openPOCount: openPOs.length,
+    totalPOCount: smartpo?.totalPOs || 0,
+    // Deposits (included in invoiced, but tracked separately - refundable at wrap)
+    deposits: totalDeposits,
+    depositCount: depositCount,
+    // Net spend = invoiced minus deposits (what's actually "spent" vs "held")
+    netInvoiced: invoicedAmount - totalDeposits
   };
   summary.totalVariance = summary.totalBudget - summary.totalActual;
+  // Variance including committed POs
+  summary.committedVariance = summary.totalBudget - summary.totalCommitted;
 
   return {
     summary,
     budgetedLocations: budgetedLocations.sort((a, b) => b.actualAmount - a.actualAmount),
     unmappedLocations: unmappedLocations.sort((a, b) => Math.abs(b.totalAmount) - Math.abs(a.totalAmount)),
+    // Include PO data for UI breakdown
+    purchaseOrders: {
+      total: smartpo?.totalPOs || 0,
+      totalAmount: smartpo?.totalAmount || 0,
+      openCount: openPOs.length,
+      openAmount: totalOpenPOAmount,
+      byStatus: smartpo?.byStatus || {}
+    },
+    // Deposit details for UI
+    deposits: {
+      total: totalDeposits,
+      count: depositCount,
+      transactions: depositTransactions
+    },
     generatedAt: new Date().toISOString()
   };
 }
@@ -529,6 +734,8 @@ export async function handler(event, context) {
     } else if (path.includes('/data')) {
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
       const budgets = await readJsonFromS3('static/parsed-budgets.json').catch(() => null);
+      const locationMappings = await readJsonFromS3('config/location-mappings.json').catch(() => ({ mappings: [] }));
+      const smartpo = await readJsonFromS3('processed/parsed-smartpo.json').catch(() => null);
 
       if (!ledgers || !budgets) {
         result = { error: 'Missing data files', budgets: !!budgets, ledgers: !!ledgers };
@@ -545,7 +752,7 @@ export async function handler(event, context) {
           ledgers.ledgers = Object.values(latestLedgers);
         }
 
-        result = generateLocationComparison(budgets, ledgers);
+        result = generateLocationComparison(budgets, ledgers, locationMappings, smartpo);
       }
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
