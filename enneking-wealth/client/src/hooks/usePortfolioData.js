@@ -76,11 +76,16 @@ export function usePortfolioData() {
 
     (holdings.accounts || []).forEach(acct => {
       (acct.positions || []).forEach(p => {
-        const quote = stockQuotes[p.ticker];
+        const quote = p.ticker ? stockQuotes[p.ticker] : null;
         const price = quote?.price || p.lastPrice || 0;
-        const value = p.type === 'money_market'
-          ? (p.shares || p.currentValue || 0)
-          : (p.shares || 0) * price;
+        let value;
+        if (p.type === 'money_market') {
+          value = p.shares || p.currentValue || 0;
+        } else if (p.ticker && p.shares > 0) {
+          value = p.shares * price;
+        } else {
+          value = p.currentValue || 0;
+        }
 
         totalValue += value;
 

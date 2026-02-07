@@ -214,7 +214,11 @@ export default function Overview({ data }) {
               <div className="holding-card" key={p.id || i}>
                 <div className="holding-info">
                   <h3>{p.ticker || p.name}</h3>
-                  <p>{p.shares} shares &middot; {p.institution}</p>
+                  <p>
+                    {p.shares > 0 ? `${p.shares} shares · ` : ''}
+                    {p.institution}
+                    {p.type === 'retirement' ? ' · Retirement' : ''}
+                  </p>
                 </div>
                 <div className="holding-value">
                   <div className="price">{formatCurrency(p.currentValue)}</div>
