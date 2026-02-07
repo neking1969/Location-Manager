@@ -384,11 +384,11 @@ router.post('/import/screenshot', async (req, res) => {
             },
             {
               type: 'text',
-              text: `Extract all investment holdings from this brokerage screenshot. Return ONLY valid JSON, no other text.
+              text: `Extract all financial account data from this screenshot. This could be individual stock positions OR account-level summaries. Return ONLY valid JSON, no other text.
 
 Format:
 {
-  "institution": "Fidelity" or "Merrill Lynch" or detected institution name,
+  "institution": "Fidelity" or "Merrill Lynch" or "Bank of America" or detected institution name,
   "positions": [
     {
       "ticker": "AAPL",
@@ -403,12 +403,15 @@ Format:
 }
 
 Rules:
+- ALWAYS extract data. If you see account names with dollar balances, extract each as a position
+- For account summaries (e.g. "Disney Long-Term Incentive Plan $309,686.30"), set the name to the account name, currentValue to the balance, shares to 0, ticker to empty string
+- For account types: use "retirement" for 401k/retirement/savings plans, "deferred_comp" for deferred comp plans, "brokerage" for individual/brokerage accounts, "banking" for checking/savings, "stock" for individual stock positions
 - For money market funds like SPAXX/FCASH, set type to "money_market" and shares to the dollar value
 - If you can see ticker symbols, always include them
 - If cost basis isn't visible, set to 0
 - Parse all dollar amounts as numbers (no $ or commas)
-- Include every position visible in the screenshot
-- If this doesn't look like a brokerage/investment screenshot, return {"error": "not_a_portfolio", "message": "description of what the image shows"}`,
+- Include EVERY account or position visible in the screenshot, even if $0.00
+- Only return {"error": "not_a_portfolio", "message": "..."} if the image has absolutely nothing to do with finances or investments (e.g. a photo of food, a selfie, etc.)`,
             },
           ],
         }],
