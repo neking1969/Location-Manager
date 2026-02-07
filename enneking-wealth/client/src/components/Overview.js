@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { formatCurrency, formatPercent } from '../hooks/usePortfolioData';
 import LinkAccount from './LinkAccount';
@@ -23,6 +23,8 @@ export default function Overview({ data }) {
     loading,
     refresh,
   } = data;
+
+  const [selectedSlice, setSelectedSlice] = useState(null);
 
   const primaryStock = config?.primaryStock || 'DIS';
   const primaryQuote = stockQuotes[primaryStock];
@@ -135,7 +137,10 @@ export default function Overview({ data }) {
       {chartData.length > 0 && (
         <div className="chart-section">
           <h2>Net Worth Breakdown</h2>
-          <div className="chart-container">
+          <div className="chart-container" onClick={(e) => {
+            // Close detail if tapping the container background
+            if (e.target === e.currentTarget) setSelectedSlice(null);
+          }}>
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie
@@ -146,20 +151,52 @@ export default function Overview({ data }) {
                   outerRadius={110}
                   paddingAngle={2}
                   dataKey="value"
+                  onClick={(_, index) => {
+                    setSelectedSlice(selectedSlice === index ? null : index);
+                  }}
                 >
-                  {chartData.map((entry) => (
+                  {chartData.map((entry, index) => (
                     <Cell
                       key={entry.name}
                       fill={CHART_COLORS[entry.name] || CHART_COLORS.Other}
+                      stroke={selectedSlice === index ? '#fff' : 'transparent'}
+                      strokeWidth={selectedSlice === index ? 3 : 0}
+                      style={{ cursor: 'pointer' }}
                     />
                   ))}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
+            {/* Center label when slice selected */}
+            {selectedSlice !== null && chartData[selectedSlice] && (
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center', pointerEvents: 'none',
+              }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {formatCurrency(chartData[selectedSlice].value)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {((chartData[selectedSlice].value / portfolio.netWorth) * 100).toFixed(1)}%
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Legend - tappable */}
           <div className="chart-legend">
-            {chartData.map(entry => (
-              <div key={entry.name} className="legend-item">
+            {chartData.map((entry, index) => (
+              <div
+                key={entry.name}
+                className="legend-item"
+                onClick={() => setSelectedSlice(selectedSlice === index ? null : index)}
+                style={{
+                  cursor: 'pointer',
+                  opacity: selectedSlice !== null && selectedSlice !== index ? 0.4 : 1,
+                  transition: 'opacity 0.2s',
+                }}
+              >
                 <div
                   className="legend-dot"
                   style={{ backgroundColor: CHART_COLORS[entry.name] || CHART_COLORS.Other }}
@@ -168,6 +205,87 @@ export default function Overview({ data }) {
               </div>
             ))}
           </div>
+
+          {/* Detail panel for selected slice */}
+          {selectedSlice !== null && chartData[selectedSlice] && (() => {
+            const selected = chartData[selectedSlice];
+            const categoryPositions = (portfolio.allPositions || []).filter(
+              p => {
+                const cat = categorizeForChart(p);
+                return cat === selected.name;
+              }
+            );
+            const manualAssets = (config?.manualAssets || []).filter(
+              a => (a.category || a.name) === selected.name
+            );
+            const pct = ((selected.value / portfolio.netWorth) * 100).toFixed(1);
+
+            return (
+              <div style={{
+                background: 'var(--bg-card)', borderRadius: 12,
+                padding: 16, marginTop: 12,
+                border: `1px solid ${CHART_COLORS[selected.name] || CHART_COLORS.Other}`,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: CHART_COLORS[selected.name] || CHART_COLORS.Other }}>
+                      {selected.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pct}% of net worth</div>
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>{formatCurrency(selected.value)}</div>
+                </div>
+
+                {categoryPositions.length > 0 && categoryPositions.map((p, i) => (
+                  <div key={p.id || i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 0',
+                    borderTop: i === 0 ? '1px solid var(--border)' : 'none',
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{p.ticker || p.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {p.shares > 0 ? `${p.shares} shares` : p.accountName || p.institution}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(p.currentValue)}</div>
+                      {p.gain !== 0 && p.costBasis > 0 && (
+                        <div style={{ fontSize: 11, color: p.gain >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                          {p.gain >= 0 ? '+' : ''}{formatCurrency(p.gain)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {manualAssets.length > 0 && manualAssets.map((a, i) => (
+                  <div key={a.id || i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 0',
+                    borderTop: categoryPositions.length === 0 && i === 0 ? '1px solid var(--border)' : 'none',
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(a.value)}</div>
+                  </div>
+                ))}
+
+                <button
+                  onClick={() => setSelectedSlice(null)}
+                  style={{
+                    marginTop: 10, width: '100%', padding: 8,
+                    background: 'none', border: '1px solid var(--border)',
+                    borderRadius: 8, color: 'var(--text-muted)',
+                    cursor: 'pointer', fontSize: 13,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -251,4 +369,14 @@ export default function Overview({ data }) {
       </div>
     </div>
   );
+}
+
+function categorizeForChart(position) {
+  const ticker = (position.ticker || '').toUpperCase();
+  const name = (position.name || '').toUpperCase();
+  if (ticker === 'DIS' || name.includes('DISNEY')) return 'Disney Equity';
+  if (ticker === 'SPAXX' || position.type === 'money_market') return 'SPAXX Cash';
+  if ((position.institution || '').toLowerCase().includes('fidelity')) return 'Fidelity';
+  if ((position.institution || '').toLowerCase().includes('merrill')) return 'Merrill Lynch';
+  return position.institution || 'Other';
 }
