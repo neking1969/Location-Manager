@@ -1,13 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { loadJSON, saveJSON } = require('../storage');
 
-const DATA_DIR = process.env.LAMBDA_TASK_ROOT ? '/tmp' : path.join(__dirname, '../../data');
-const DATA_FILE = path.join(DATA_DIR, 'portfolio.json');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const PORTFOLIO_FILE = 'portfolio.json';
 
-// Default portfolio config
 const defaultPortfolio = {
   goals: {
     targetNetWorth: 5595590,
@@ -35,132 +31,183 @@ const defaultPortfolio = {
   spaxxThreshold: 50000,
 };
 
-function loadPortfolio() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch (err) {
-    console.error('Error loading portfolio:', err.message);
-  }
-  return { ...defaultPortfolio };
+async function loadPortfolio() {
+  return loadJSON(PORTFOLIO_FILE, defaultPortfolio);
 }
 
-function savePortfolio(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+async function savePortfolio(data) {
+  await saveJSON(PORTFOLIO_FILE, data);
 }
 
 // Get full portfolio config
-router.get('/config', (req, res) => {
-  res.json(loadPortfolio());
+router.get('/config', async (req, res) => {
+  try {
+    res.json(await loadPortfolio());
+  } catch (err) {
+    console.error('GET /portfolio/config error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update portfolio config
-router.put('/config', (req, res) => {
-  const current = loadPortfolio();
-  const updated = { ...current, ...req.body, updatedAt: new Date().toISOString() };
-  savePortfolio(updated);
-  res.json(updated);
+router.put('/config', async (req, res) => {
+  try {
+    const current = await loadPortfolio();
+    const updated = { ...current, ...req.body, updatedAt: new Date().toISOString() };
+    await savePortfolio(updated);
+    res.json(updated);
+  } catch (err) {
+    console.error('PUT /portfolio/config error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get/update goals
-router.get('/goals', (req, res) => {
-  const portfolio = loadPortfolio();
-  res.json(portfolio.goals);
+router.get('/goals', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    res.json(portfolio.goals);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/goals', (req, res) => {
-  const portfolio = loadPortfolio();
-  portfolio.goals = { ...portfolio.goals, ...req.body };
-  savePortfolio(portfolio);
-  res.json(portfolio.goals);
+router.put('/goals', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    portfolio.goals = { ...portfolio.goals, ...req.body };
+    await savePortfolio(portfolio);
+    res.json(portfolio.goals);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Manual assets (home equity, etc.)
-router.get('/manual-assets', (req, res) => {
-  const portfolio = loadPortfolio();
-  res.json(portfolio.manualAssets || []);
+router.get('/manual-assets', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    res.json(portfolio.manualAssets || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.post('/manual-assets', (req, res) => {
-  const portfolio = loadPortfolio();
-  const asset = {
-    id: `manual-${Date.now()}`,
-    ...req.body,
-    updatedAt: new Date().toISOString(),
-  };
-  portfolio.manualAssets = portfolio.manualAssets || [];
-  portfolio.manualAssets.push(asset);
-  savePortfolio(portfolio);
-  res.json(asset);
+router.post('/manual-assets', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    const asset = {
+      id: `manual-${Date.now()}`,
+      ...req.body,
+      updatedAt: new Date().toISOString(),
+    };
+    portfolio.manualAssets = portfolio.manualAssets || [];
+    portfolio.manualAssets.push(asset);
+    await savePortfolio(portfolio);
+    res.json(asset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/manual-assets/:id', (req, res) => {
-  const portfolio = loadPortfolio();
-  const idx = (portfolio.manualAssets || []).findIndex(a => a.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Asset not found' });
-  portfolio.manualAssets[idx] = {
-    ...portfolio.manualAssets[idx],
-    ...req.body,
-    updatedAt: new Date().toISOString(),
-  };
-  savePortfolio(portfolio);
-  res.json(portfolio.manualAssets[idx]);
+router.put('/manual-assets/:id', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    const idx = (portfolio.manualAssets || []).findIndex(a => a.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Asset not found' });
+    portfolio.manualAssets[idx] = {
+      ...portfolio.manualAssets[idx],
+      ...req.body,
+      updatedAt: new Date().toISOString(),
+    };
+    await savePortfolio(portfolio);
+    res.json(portfolio.manualAssets[idx]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.delete('/manual-assets/:id', (req, res) => {
-  const portfolio = loadPortfolio();
-  portfolio.manualAssets = (portfolio.manualAssets || []).filter(a => a.id !== req.params.id);
-  savePortfolio(portfolio);
-  res.json({ success: true });
+router.delete('/manual-assets/:id', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    portfolio.manualAssets = (portfolio.manualAssets || []).filter(a => a.id !== req.params.id);
+    await savePortfolio(portfolio);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // RSU Awards
-router.get('/rsu-awards', (req, res) => {
-  const portfolio = loadPortfolio();
-  res.json(portfolio.rsuAwards || []);
+router.get('/rsu-awards', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    res.json(portfolio.rsuAwards || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.post('/rsu-awards', (req, res) => {
-  const portfolio = loadPortfolio();
-  const award = {
-    id: `rsu-${Date.now()}`,
-    ...req.body,
-    createdAt: new Date().toISOString(),
-  };
-  portfolio.rsuAwards = portfolio.rsuAwards || [];
-  portfolio.rsuAwards.push(award);
-  savePortfolio(portfolio);
-  res.json(award);
+router.post('/rsu-awards', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    const award = {
+      id: `rsu-${Date.now()}`,
+      ...req.body,
+      createdAt: new Date().toISOString(),
+    };
+    portfolio.rsuAwards = portfolio.rsuAwards || [];
+    portfolio.rsuAwards.push(award);
+    await savePortfolio(portfolio);
+    res.json(award);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/rsu-awards/:id', (req, res) => {
-  const portfolio = loadPortfolio();
-  const idx = (portfolio.rsuAwards || []).findIndex(a => a.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'RSU award not found' });
-  portfolio.rsuAwards[idx] = { ...portfolio.rsuAwards[idx], ...req.body };
-  savePortfolio(portfolio);
-  res.json(portfolio.rsuAwards[idx]);
+router.put('/rsu-awards/:id', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    const idx = (portfolio.rsuAwards || []).findIndex(a => a.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'RSU award not found' });
+    portfolio.rsuAwards[idx] = { ...portfolio.rsuAwards[idx], ...req.body };
+    await savePortfolio(portfolio);
+    res.json(portfolio.rsuAwards[idx]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.delete('/rsu-awards/:id', (req, res) => {
-  const portfolio = loadPortfolio();
-  portfolio.rsuAwards = (portfolio.rsuAwards || []).filter(a => a.id !== req.params.id);
-  savePortfolio(portfolio);
-  res.json({ success: true });
+router.delete('/rsu-awards/:id', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    portfolio.rsuAwards = (portfolio.rsuAwards || []).filter(a => a.id !== req.params.id);
+    await savePortfolio(portfolio);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Pension config
-router.get('/pension', (req, res) => {
-  const portfolio = loadPortfolio();
-  res.json(portfolio.pensionConfig || {});
+router.get('/pension', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    res.json(portfolio.pensionConfig || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/pension', (req, res) => {
-  const portfolio = loadPortfolio();
-  portfolio.pensionConfig = { ...portfolio.pensionConfig, ...req.body };
-  savePortfolio(portfolio);
-  res.json(portfolio.pensionConfig);
+router.put('/pension', async (req, res) => {
+  try {
+    const portfolio = await loadPortfolio();
+    portfolio.pensionConfig = { ...portfolio.pensionConfig, ...req.body };
+    await savePortfolio(portfolio);
+    res.json(portfolio.pensionConfig);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

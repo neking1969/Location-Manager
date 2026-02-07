@@ -1,117 +1,142 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { loadJSON, saveJSON } = require('../storage');
 
-const DATA_DIR = process.env.LAMBDA_TASK_ROOT ? '/tmp' : path.join(__dirname, '../../data');
-const DATA_FILE = path.join(DATA_DIR, 'holdings.json');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const HOLDINGS_FILE = 'holdings.json';
+const DEFAULT_HOLDINGS = { accounts: [], lastUpdated: null };
 
-function loadHoldings() {
-  try {
-    if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch (err) { console.error('Error loading holdings:', err.message); }
-  return { accounts: [], lastUpdated: null };
+async function loadHoldings() {
+  return loadJSON(HOLDINGS_FILE, DEFAULT_HOLDINGS);
 }
 
-function saveHoldings(data) {
+async function saveHoldings(data) {
   data.lastUpdated = new Date().toISOString();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  await saveJSON(HOLDINGS_FILE, data);
 }
 
 // Get all holdings
-router.get('/', (req, res) => {
-  res.json(loadHoldings());
+router.get('/', async (req, res) => {
+  try {
+    res.json(await loadHoldings());
+  } catch (err) {
+    console.error('GET /holdings error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Add/update an account manually
-router.post('/account', (req, res) => {
-  const data = loadHoldings();
-  const { name, institution, positions } = req.body;
-  if (!name) return res.status(400).json({ error: 'Account name required' });
+router.post('/account', async (req, res) => {
+  try {
+    const data = await loadHoldings();
+    const { name, institution, positions } = req.body;
+    if (!name) return res.status(400).json({ error: 'Account name required' });
 
-  const existing = data.accounts.findIndex(a => a.id === req.body.id);
-  const account = {
-    id: req.body.id || `acct-${Date.now()}`,
-    name,
-    institution: institution || '',
-    positions: positions || [],
-    updatedAt: new Date().toISOString(),
-  };
+    const existing = data.accounts.findIndex(a => a.id === req.body.id);
+    const account = {
+      id: req.body.id || `acct-${Date.now()}`,
+      name,
+      institution: institution || '',
+      positions: positions || [],
+      updatedAt: new Date().toISOString(),
+    };
 
-  if (existing >= 0) {
-    data.accounts[existing] = account;
-  } else {
-    data.accounts.push(account);
+    if (existing >= 0) {
+      data.accounts[existing] = account;
+    } else {
+      data.accounts.push(account);
+    }
+    await saveHoldings(data);
+    res.json(account);
+  } catch (err) {
+    console.error('POST /holdings/account error:', err);
+    res.status(500).json({ error: err.message });
   }
-  saveHoldings(data);
-  res.json(account);
 });
 
 // Delete an account
-router.delete('/account/:id', (req, res) => {
-  const data = loadHoldings();
-  data.accounts = data.accounts.filter(a => a.id !== req.params.id);
-  saveHoldings(data);
-  res.json({ success: true });
+router.delete('/account/:id', async (req, res) => {
+  try {
+    const data = await loadHoldings();
+    data.accounts = data.accounts.filter(a => a.id !== req.params.id);
+    await saveHoldings(data);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /holdings/account error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Add a single position to an account
-router.post('/account/:id/position', (req, res) => {
-  const data = loadHoldings();
-  const account = data.accounts.find(a => a.id === req.params.id);
-  if (!account) return res.status(404).json({ error: 'Account not found' });
+router.post('/account/:id/position', async (req, res) => {
+  try {
+    const data = await loadHoldings();
+    const account = data.accounts.find(a => a.id === req.params.id);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
 
-  const position = {
-    id: `pos-${Date.now()}`,
-    ticker: (req.body.ticker || '').toUpperCase(),
-    name: req.body.name || '',
-    shares: Number(req.body.shares) || 0,
-    costBasis: Number(req.body.costBasis) || 0,
-    type: req.body.type || 'stock',
-    addedAt: new Date().toISOString(),
-  };
-  account.positions.push(position);
-  account.updatedAt = new Date().toISOString();
-  saveHoldings(data);
-  res.json(position);
+    const position = {
+      id: `pos-${Date.now()}`,
+      ticker: (req.body.ticker || '').toUpperCase(),
+      name: req.body.name || '',
+      shares: Number(req.body.shares) || 0,
+      costBasis: Number(req.body.costBasis) || 0,
+      type: req.body.type || 'stock',
+      addedAt: new Date().toISOString(),
+    };
+    account.positions.push(position);
+    account.updatedAt = new Date().toISOString();
+    await saveHoldings(data);
+    res.json(position);
+  } catch (err) {
+    console.error('POST /holdings/account/:id/position error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update a position
-router.put('/account/:accountId/position/:posId', (req, res) => {
-  const data = loadHoldings();
-  const account = data.accounts.find(a => a.id === req.params.accountId);
-  if (!account) return res.status(404).json({ error: 'Account not found' });
+router.put('/account/:accountId/position/:posId', async (req, res) => {
+  try {
+    const data = await loadHoldings();
+    const account = data.accounts.find(a => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
 
-  const idx = account.positions.findIndex(p => p.id === req.params.posId);
-  if (idx === -1) return res.status(404).json({ error: 'Position not found' });
+    const idx = account.positions.findIndex(p => p.id === req.params.posId);
+    if (idx === -1) return res.status(404).json({ error: 'Position not found' });
 
-  account.positions[idx] = { ...account.positions[idx], ...req.body, id: req.params.posId };
-  account.updatedAt = new Date().toISOString();
-  saveHoldings(data);
-  res.json(account.positions[idx]);
+    account.positions[idx] = { ...account.positions[idx], ...req.body, id: req.params.posId };
+    account.updatedAt = new Date().toISOString();
+    await saveHoldings(data);
+    res.json(account.positions[idx]);
+  } catch (err) {
+    console.error('PUT /holdings position error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete a position
-router.delete('/account/:accountId/position/:posId', (req, res) => {
-  const data = loadHoldings();
-  const account = data.accounts.find(a => a.id === req.params.accountId);
-  if (!account) return res.status(404).json({ error: 'Account not found' });
+router.delete('/account/:accountId/position/:posId', async (req, res) => {
+  try {
+    const data = await loadHoldings();
+    const account = data.accounts.find(a => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
 
-  account.positions = account.positions.filter(p => p.id !== req.params.posId);
-  account.updatedAt = new Date().toISOString();
-  saveHoldings(data);
-  res.json({ success: true });
+    account.positions = account.positions.filter(p => p.id !== req.params.posId);
+    account.updatedAt = new Date().toISOString();
+    await saveHoldings(data);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /holdings position error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Import CSV from Fidelity
-router.post('/import/fidelity', (req, res) => {
+router.post('/import/fidelity', async (req, res) => {
   try {
     const { csv, accountName } = req.body;
     if (!csv) return res.status(400).json({ error: 'CSV data required' });
 
     const positions = parseFidelityCSV(csv);
-    const data = loadHoldings();
+    const data = await loadHoldings();
 
     const accountId = `fidelity-${Date.now()}`;
     data.accounts.push({
@@ -121,7 +146,7 @@ router.post('/import/fidelity', (req, res) => {
       positions,
       updatedAt: new Date().toISOString(),
     });
-    saveHoldings(data);
+    await saveHoldings(data);
     res.json({ success: true, accountId, positionsImported: positions.length });
   } catch (err) {
     res.status(400).json({ error: `Failed to parse CSV: ${err.message}` });
@@ -129,13 +154,13 @@ router.post('/import/fidelity', (req, res) => {
 });
 
 // Import CSV from Merrill Lynch / Merrill Edge
-router.post('/import/merrill', (req, res) => {
+router.post('/import/merrill', async (req, res) => {
   try {
     const { csv, accountName } = req.body;
     if (!csv) return res.status(400).json({ error: 'CSV data required' });
 
     const positions = parseMerrillCSV(csv);
-    const data = loadHoldings();
+    const data = await loadHoldings();
 
     const accountId = `merrill-${Date.now()}`;
     data.accounts.push({
@@ -145,7 +170,7 @@ router.post('/import/merrill', (req, res) => {
       positions,
       updatedAt: new Date().toISOString(),
     });
-    saveHoldings(data);
+    await saveHoldings(data);
     res.json({ success: true, accountId, positionsImported: positions.length });
   } catch (err) {
     res.status(400).json({ error: `Failed to parse CSV: ${err.message}` });
@@ -153,13 +178,13 @@ router.post('/import/merrill', (req, res) => {
 });
 
 // Generic CSV import
-router.post('/import/generic', (req, res) => {
+router.post('/import/generic', async (req, res) => {
   try {
     const { csv, accountName, institution } = req.body;
     if (!csv) return res.status(400).json({ error: 'CSV data required' });
 
     const positions = parseGenericCSV(csv);
-    const data = loadHoldings();
+    const data = await loadHoldings();
 
     const accountId = `import-${Date.now()}`;
     data.accounts.push({
@@ -169,7 +194,7 @@ router.post('/import/generic', (req, res) => {
       positions,
       updatedAt: new Date().toISOString(),
     });
-    saveHoldings(data);
+    await saveHoldings(data);
     res.json({ success: true, accountId, positionsImported: positions.length });
   } catch (err) {
     res.status(400).json({ error: `Failed to parse CSV: ${err.message}` });
@@ -179,12 +204,9 @@ router.post('/import/generic', (req, res) => {
 // ---- CSV Parsers ----
 
 function parseFidelityCSV(csv) {
-  // Fidelity "Positions" export format:
-  // Account Name/Number, Symbol, Description, Quantity, Last Price, Current Value, ...
   const lines = csv.trim().split('\n');
   const positions = [];
 
-  // Find header row
   let headerIdx = lines.findIndex(line =>
     line.toLowerCase().includes('symbol') && line.toLowerCase().includes('quantity')
   );
@@ -225,8 +247,6 @@ function parseFidelityCSV(csv) {
 }
 
 function parseMerrillCSV(csv) {
-  // Merrill Edge / Merrill Lynch export format:
-  // Symbol, Description, Quantity, Price, Value, ...
   const lines = csv.trim().split('\n');
   const positions = [];
 
@@ -429,7 +449,7 @@ Rules:
       addedAt: new Date().toISOString(),
     }));
 
-    const data = loadHoldings();
+    const data = await loadHoldings();
     const accountId = `screenshot-${Date.now()}`;
     data.accounts.push({
       id: accountId,
@@ -438,7 +458,7 @@ Rules:
       positions,
       updatedAt: new Date().toISOString(),
     });
-    saveHoldings(data);
+    await saveHoldings(data);
 
     res.json({
       success: true,
