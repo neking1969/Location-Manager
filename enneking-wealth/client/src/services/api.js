@@ -30,6 +30,8 @@ export const importMerrill = (csv, accountName) =>
   fetchApi('/api/holdings/import/merrill', { method: 'POST', body: JSON.stringify({ csv, accountName }) });
 export const importGeneric = (csv, accountName, institution) =>
   fetchApi('/api/holdings/import/generic', { method: 'POST', body: JSON.stringify({ csv, accountName, institution }) });
+export const importScreenshot = (image, accountName, institution) =>
+  fetchApi('/api/holdings/import/screenshot', { method: 'POST', body: JSON.stringify({ image, accountName, institution }) });
 
 // Stock prices (Finnhub - free)
 export const getQuote = (symbol) => fetchApi(`/api/stocks/quote/${symbol}`);

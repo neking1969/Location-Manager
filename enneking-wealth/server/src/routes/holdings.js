@@ -332,4 +332,125 @@ function parseNumber(str) {
   return isNaN(num) ? 0 : num;
 }
 
+// Import from iOS screenshot using Claude Vision
+router.post('/import/screenshot', async (req, res) => {
+  try {
+    const { image, accountName, institution } = req.body;
+    if (!image) return res.status(400).json({ error: 'Image data required' });
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'Anthropic API key not configured' });
+
+    // Strip data URL prefix if present
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    const mediaType = image.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 2048,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64Data },
+            },
+            {
+              type: 'text',
+              text: `Extract all investment holdings from this brokerage screenshot. Return ONLY valid JSON, no other text.
+
+Format:
+{
+  "institution": "Fidelity" or "Merrill Lynch" or detected institution name,
+  "positions": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc",
+      "shares": 100,
+      "lastPrice": 150.25,
+      "currentValue": 15025.00,
+      "costBasis": 12000.00,
+      "type": "stock"
+    }
+  ]
+}
+
+Rules:
+- For money market funds like SPAXX/FCASH, set type to "money_market" and shares to the dollar value
+- If you can see ticker symbols, always include them
+- If cost basis isn't visible, set to 0
+- Parse all dollar amounts as numbers (no $ or commas)
+- Include every position visible in the screenshot
+- If this doesn't look like a brokerage/investment screenshot, return {"error": "not_a_portfolio", "message": "description of what the image shows"}`,
+            },
+          ],
+        }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error('Claude API error:', response.status, errBody);
+      return res.status(500).json({ error: 'Failed to analyze screenshot' });
+    }
+
+    const result = await response.json();
+    const text = result.content?.[0]?.text || '';
+
+    // Extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(400).json({ error: 'Could not parse holdings from screenshot' });
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    if (parsed.error === 'not_a_portfolio') {
+      return res.status(400).json({ error: parsed.message || 'Not a portfolio screenshot' });
+    }
+
+    // Save to holdings
+    const positions = (parsed.positions || []).map((p, i) => ({
+      id: `pos-${Date.now()}-${i}`,
+      ticker: (p.ticker || '').toUpperCase(),
+      name: p.name || p.ticker || '',
+      shares: Number(p.shares) || 0,
+      lastPrice: Number(p.lastPrice) || 0,
+      currentValue: Number(p.currentValue) || 0,
+      costBasis: Number(p.costBasis) || 0,
+      type: p.type || 'stock',
+      addedAt: new Date().toISOString(),
+    }));
+
+    const data = loadHoldings();
+    const accountId = `screenshot-${Date.now()}`;
+    data.accounts.push({
+      id: accountId,
+      name: accountName || parsed.institution || institution || 'Imported',
+      institution: parsed.institution || institution || 'Unknown',
+      positions,
+      updatedAt: new Date().toISOString(),
+    });
+    saveHoldings(data);
+
+    res.json({
+      success: true,
+      accountId,
+      institution: parsed.institution,
+      positionsImported: positions.length,
+      positions,
+    });
+  } catch (err) {
+    console.error('Screenshot import error:', err);
+    res.status(500).json({ error: `Failed to process screenshot: ${err.message}` });
+  }
+});
+
 module.exports = router;
