@@ -27,20 +27,14 @@ export default function Overview({ data }) {
   const primaryStock = config?.primaryStock || 'DIS';
   const primaryQuote = stockQuotes[primaryStock];
 
-  // Daily change from stock prices
-  const dailyChange = primaryQuote ? primaryQuote.change * getDISShares() : 0;
-
-  function getDISShares() {
-    let shares = 0;
-    (holdings || []).forEach(inst => {
-      (inst.holdings || []).forEach(h => {
-        if ((h.ticker || '').toUpperCase() === 'DIS') {
-          shares += h.quantity || 0;
-        }
-      });
-    });
-    return shares;
-  }
+  // Daily change from all positions with live quotes
+  const dailyChange = (portfolio.allPositions || []).reduce((sum, p) => {
+    const quote = stockQuotes[p.ticker];
+    if (quote && p.type !== 'money_market') {
+      return sum + (quote.change || 0) * (p.shares || 0);
+    }
+    return sum;
+  }, 0);
 
   // Build chart data
   const chartData = Object.entries(portfolio.holdingsByCategory || {})
@@ -83,9 +77,7 @@ export default function Overview({ data }) {
         {/* Stock ticker pill */}
         {primaryQuote && (
           <div className="stock-ticker">
-            <span className="stock-ticker-logo">
-              {primaryStock === 'DIS' ? '\uD835\uDC1F\u0456\uD835\uDC2C\u0578\u0435\u0443' : primaryStock}
-            </span>
+            <span className="stock-ticker-logo">Disney</span>
             <span className="stock-ticker-price">
               ${primaryQuote.price?.toFixed(2)}
             </span>
@@ -213,41 +205,41 @@ export default function Overview({ data }) {
       )}
 
       {/* Holdings Detail */}
-      <div className="holdings-section">
-        <h2>Holdings</h2>
-        {(holdings || []).map(inst => (
-          <div key={inst.itemId}>
-            {(inst.holdings || []).map((h, i) => {
-              const quote = h.ticker ? stockQuotes[h.ticker] : null;
-              return (
-                <div className="holding-card" key={`${inst.itemId}-${i}`}>
-                  <div className="holding-info">
-                    <h3>{h.ticker || h.name}</h3>
-                    <p>{h.name} &middot; {inst.institution}</p>
-                  </div>
-                  <div className="holding-value">
-                    <div className="price">{formatCurrency(h.value)}</div>
-                    {quote && (
-                      <div className={`change ${quote.changePercent >= 0 ? 'positive' : 'negative'}`}>
-                        {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
-                      </div>
-                    )}
-                  </div>
+      {(portfolio.allPositions || []).length > 0 && (
+        <div className="holdings-section">
+          <h2>Holdings</h2>
+          {(portfolio.allPositions || []).map((p, i) => {
+            const quote = p.ticker ? stockQuotes[p.ticker] : null;
+            return (
+              <div className="holding-card" key={p.id || i}>
+                <div className="holding-info">
+                  <h3>{p.ticker || p.name}</h3>
+                  <p>{p.shares} shares &middot; {p.institution}</p>
                 </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+                <div className="holding-value">
+                  <div className="price">{formatCurrency(p.currentValue)}</div>
+                  {quote && (
+                    <div className={`change ${quote.changePercent >= 0 ? 'positive' : 'negative'}`}>
+                      {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Linked Accounts */}
+      {/* Accounts & Import */}
       <div className="accounts-section">
-        <h2>Linked Accounts</h2>
-        {(data.institutions || []).map(inst => (
-          <div className="account-item" key={inst.itemId}>
+        <h2>Accounts</h2>
+        {(holdings.accounts || []).map(acct => (
+          <div className="account-item" key={acct.id}>
             <div>
-              <div className="account-name">{inst.name}</div>
-              <div className="account-type">Linked {new Date(inst.linkedAt).toLocaleDateString()}</div>
+              <div className="account-name">{acct.name}</div>
+              <div className="account-type">
+                {acct.institution} &middot; {(acct.positions || []).length} positions
+              </div>
             </div>
           </div>
         ))}

@@ -3,18 +3,18 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-const plaidRoutes = require('./routes/plaid');
+const holdingsRoutes = require('./routes/holdings');
 const stockRoutes = require('./routes/stocks');
 const portfolioRoutes = require('./routes/portfolio');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000' }));
-app.use(express.json());
+app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
+app.use(express.json({ limit: '5mb' }));
 
 // API routes
-app.use('/api/plaid', plaidRoutes);
+app.use('/api/holdings', holdingsRoutes);
 app.use('/api/stocks', stockRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 

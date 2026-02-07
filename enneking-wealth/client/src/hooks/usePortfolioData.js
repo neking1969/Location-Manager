@@ -1,48 +1,45 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '../services/api';
 
 export function usePortfolioData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [accounts, setAccounts] = useState([]);
-  const [holdings, setHoldings] = useState([]);
-  const [institutions, setInstitutions] = useState([]);
+  const [holdings, setHoldings] = useState({ accounts: [] });
   const [config, setConfig] = useState(null);
   const [stockQuotes, setStockQuotes] = useState({});
   const [rsuAwards, setRSUAwards] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const quotesRef = useRef({});
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [acctData, holdData, instData, configData, rsuData] = await Promise.all([
-        api.getAccounts().catch(() => ({ accounts: [] })),
-        api.getHoldings().catch(() => ({ holdings: [] })),
-        api.getInstitutions().catch(() => ({ institutions: [] })),
+      const [holdData, configData, rsuData] = await Promise.all([
+        api.getHoldings().catch(() => ({ accounts: [] })),
         api.getPortfolioConfig().catch(() => null),
         api.getRSUAwards().catch(() => []),
       ]);
 
-      setAccounts(acctData.accounts || []);
-      setHoldings(holdData.holdings || []);
-      setInstitutions(instData.institutions || []);
+      setHoldings(holdData);
       setConfig(configData);
       setRSUAwards(rsuData);
 
-      // Collect all stock symbols from holdings + watchlist
+      // Collect all tickers for live price updates
       const symbols = new Set();
       if (configData?.primaryStock) symbols.add(configData.primaryStock);
       if (configData?.watchlist) configData.watchlist.forEach(s => symbols.add(s));
-      (holdData.holdings || []).forEach(inst => {
-        (inst.holdings || []).forEach(h => {
-          if (h.ticker) symbols.add(h.ticker);
+      (holdData.accounts || []).forEach(acct => {
+        (acct.positions || []).forEach(p => {
+          if (p.ticker && p.type !== 'money_market') symbols.add(p.ticker);
         });
       });
 
       if (symbols.size > 0) {
         const quoteData = await api.getQuotes([...symbols]).catch(() => ({ quotes: {} }));
-        setStockQuotes(quoteData.quotes || {});
+        const quotes = quoteData.quotes || {};
+        setStockQuotes(quotes);
+        quotesRef.current = quotes;
       }
 
       setLastUpdated(new Date());
@@ -55,46 +52,56 @@ export function usePortfolioData() {
 
   useEffect(() => {
     refresh();
-    // Refresh quotes every 30 seconds
     const interval = setInterval(async () => {
-      const symbols = Object.keys(stockQuotes);
+      const symbols = Object.keys(quotesRef.current);
       if (symbols.length > 0) {
         try {
           const quoteData = await api.getQuotes(symbols);
-          setStockQuotes(quoteData.quotes || {});
+          const quotes = quoteData.quotes || {};
+          setStockQuotes(quotes);
+          quotesRef.current = quotes;
         } catch (err) {
-          // Silently fail quote refresh
+          // silent
         }
       }
     }, 30000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line
-  }, []);
+  }, [refresh]);
 
-  // Compute aggregated values
   const computePortfolio = useCallback(() => {
-    let investmentValue = 0;
+    let totalValue = 0;
     let spaxxCash = 0;
     const holdingsByCategory = {};
+    const allPositions = [];
 
-    // Sum investment holdings
-    holdings.forEach(inst => {
-      (inst.holdings || []).forEach(h => {
-        const value = h.value || (h.quantity * h.price) || 0;
-        investmentValue += value;
+    (holdings.accounts || []).forEach(acct => {
+      (acct.positions || []).forEach(p => {
+        const quote = stockQuotes[p.ticker];
+        const price = quote?.price || p.lastPrice || 0;
+        const value = p.type === 'money_market'
+          ? (p.shares || p.currentValue || 0)
+          : (p.shares || 0) * price;
 
-        // Identify SPAXX (Fidelity money market)
-        if (h.ticker === 'SPAXX' || (h.name && h.name.includes('GOVERNMENT MONEY'))) {
+        totalValue += value;
+
+        if (p.ticker === 'SPAXX' || p.type === 'money_market') {
           spaxxCash += value;
         }
 
-        // Categorize
-        const category = categorizeHolding(h, inst.institution);
+        const category = categorizePosition(p, acct.institution);
         holdingsByCategory[category] = (holdingsByCategory[category] || 0) + value;
+
+        allPositions.push({
+          ...p,
+          currentPrice: price,
+          currentValue: value,
+          gain: value - (p.costBasis || 0),
+          institution: acct.institution,
+          accountName: acct.name,
+        });
       });
     });
 
-    // Add manual assets
     let manualTotal = 0;
     (config?.manualAssets || []).forEach(asset => {
       manualTotal += asset.value || 0;
@@ -102,12 +109,11 @@ export function usePortfolioData() {
         (holdingsByCategory[asset.category || asset.name] || 0) + (asset.value || 0);
     });
 
-    const netWorth = investmentValue + manualTotal;
+    const netWorth = totalValue + manualTotal;
     const goalTarget = config?.goals?.targetNetWorth || 5595590;
     const goalProgress = goalTarget > 0 ? (netWorth / goalTarget) * 100 : 0;
     const goalRemaining = Math.max(0, goalTarget - netWorth);
 
-    // Investable = liquid assets (investments minus home equity and other illiquid)
     const illiquidCategories = ['Home Equity'];
     const investable = Object.entries(holdingsByCategory)
       .filter(([cat]) => !illiquidCategories.includes(cat))
@@ -122,16 +128,15 @@ export function usePortfolioData() {
       spaxxCash,
       spaxxThreshold: config?.spaxxThreshold || 50000,
       holdingsByCategory,
-      totalInvestments: investmentValue,
+      allPositions,
+      totalInvestments: totalValue,
     };
-  }, [holdings, config]);
+  }, [holdings, config, stockQuotes]);
 
   return {
     loading,
     error,
-    accounts,
     holdings,
-    institutions,
     config,
     stockQuotes,
     rsuAwards,
@@ -141,14 +146,14 @@ export function usePortfolioData() {
   };
 }
 
-function categorizeHolding(holding, institution) {
-  const ticker = (holding.ticker || '').toUpperCase();
-  const name = (holding.name || '').toUpperCase();
+function categorizePosition(position, institution) {
+  const ticker = (position.ticker || '').toUpperCase();
+  const name = (position.name || '').toUpperCase();
 
   if (ticker === 'DIS' || name.includes('DISNEY')) return 'Disney Equity';
-  if (ticker === 'SPAXX' || name.includes('GOVERNMENT MONEY')) return 'SPAXX Cash';
-  if (institution?.toLowerCase().includes('fidelity')) return 'Fidelity';
-  if (institution?.toLowerCase().includes('merrill')) return 'Merrill Lynch';
+  if (ticker === 'SPAXX' || position.type === 'money_market') return 'SPAXX Cash';
+  if ((institution || '').toLowerCase().includes('fidelity')) return 'Fidelity';
+  if ((institution || '').toLowerCase().includes('merrill')) return 'Merrill Lynch';
   return institution || 'Other';
 }
 

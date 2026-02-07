@@ -12,30 +12,33 @@ async function fetchApi(path, options = {}) {
   return res.json();
 }
 
-// Plaid
-export const createLinkToken = () => fetchApi('/api/plaid/link-token', { method: 'POST' });
-export const exchangeToken = (publicToken, institution) =>
-  fetchApi('/api/plaid/exchange-token', {
-    method: 'POST',
-    body: JSON.stringify({ public_token: publicToken, institution }),
-  });
-export const getAccounts = () => fetchApi('/api/plaid/accounts');
-export const getHoldings = () => fetchApi('/api/plaid/holdings');
-export const getInstitutions = () => fetchApi('/api/plaid/institutions');
-export const removeAccount = (itemId) =>
-  fetchApi(`/api/plaid/accounts/${itemId}`, { method: 'DELETE' });
+// Holdings (CSV import + manual entry - free!)
+export const getHoldings = () => fetchApi('/api/holdings');
+export const addAccount = (data) =>
+  fetchApi('/api/holdings/account', { method: 'POST', body: JSON.stringify(data) });
+export const deleteAccount = (id) =>
+  fetchApi(`/api/holdings/account/${id}`, { method: 'DELETE' });
+export const addPosition = (accountId, data) =>
+  fetchApi(`/api/holdings/account/${accountId}/position`, { method: 'POST', body: JSON.stringify(data) });
+export const updatePosition = (accountId, posId, data) =>
+  fetchApi(`/api/holdings/account/${accountId}/position/${posId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deletePosition = (accountId, posId) =>
+  fetchApi(`/api/holdings/account/${accountId}/position/${posId}`, { method: 'DELETE' });
+export const importFidelity = (csv, accountName) =>
+  fetchApi('/api/holdings/import/fidelity', { method: 'POST', body: JSON.stringify({ csv, accountName }) });
+export const importMerrill = (csv, accountName) =>
+  fetchApi('/api/holdings/import/merrill', { method: 'POST', body: JSON.stringify({ csv, accountName }) });
+export const importGeneric = (csv, accountName, institution) =>
+  fetchApi('/api/holdings/import/generic', { method: 'POST', body: JSON.stringify({ csv, accountName, institution }) });
 
-// Stock prices
+// Stock prices (Finnhub - free)
 export const getQuote = (symbol) => fetchApi(`/api/stocks/quote/${symbol}`);
 export const getQuotes = (symbols) =>
-  fetchApi('/api/stocks/quotes', {
-    method: 'POST',
-    body: JSON.stringify({ symbols }),
-  });
+  fetchApi('/api/stocks/quotes', { method: 'POST', body: JSON.stringify({ symbols }) });
 export const getProfile = (symbol) => fetchApi(`/api/stocks/profile/${symbol}`);
 export const searchStocks = (q) => fetchApi(`/api/stocks/search?q=${encodeURIComponent(q)}`);
 
-// Portfolio
+// Portfolio config
 export const getPortfolioConfig = () => fetchApi('/api/portfolio/config');
 export const updatePortfolioConfig = (data) =>
   fetchApi('/api/portfolio/config', { method: 'PUT', body: JSON.stringify(data) });
