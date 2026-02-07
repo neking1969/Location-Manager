@@ -1,0 +1,613 @@
+/* Enneking Wealth - Dark Theme */
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #1a2035;
+  --bg-card-hover: #1f2847;
+  --border: #2a3350;
+  --text-primary: #f0f2f5;
+  --text-secondary: #8b95a8;
+  --text-muted: #5a6478;
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-red: #ef4444;
+  --accent-yellow: #f59e0b;
+  --accent-purple: #a855f7;
+  --accent-teal: #14b8a6;
+  --chart-disney: #a855f7;
+  --chart-fidelity: #3b82f6;
+  --chart-home: #22c55e;
+  --chart-mpiphp: #14b8a6;
+  --chart-merrill: #f59e0b;
+  --chart-spaxx: #6366f1;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  position: relative;
+  padding-bottom: 80px;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  padding: 16px 20px 20px;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.header-values {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.header-net-worth {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent-green);
+}
+
+.header-change {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.header-change.negative {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+.header-change.positive {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--accent-green);
+}
+
+.header-goal {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Stock ticker pill */
+.stock-ticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+.stock-ticker-logo {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Georgia', serif;
+  letter-spacing: -0.5px;
+}
+
+.stock-ticker-price {
+  font-weight: 600;
+}
+
+.stock-ticker-change {
+  font-weight: 500;
+}
+
+.stock-ticker-change.positive {
+  color: var(--accent-green);
+}
+
+.stock-ticker-change.negative {
+  color: var(--accent-red);
+}
+
+/* Summary cards grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 16px;
+  margin-bottom: 12px;
+}
+
+.summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.summary-card.alert {
+  border-color: var(--accent-yellow);
+}
+
+.summary-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.summary-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.summary-card-icon {
+  font-size: 18px;
+  color: var(--accent-blue);
+}
+
+.summary-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.summary-card-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alert-icon {
+  color: var(--accent-yellow);
+  font-size: 18px;
+}
+
+/* Chart section */
+.chart-section {
+  margin: 20px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.chart-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.chart-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* RSU Awards */
+.rsu-section {
+  margin: 20px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.rsu-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.rsu-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rsu-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rsu-table td {
+  padding: 10px 0;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(42, 51, 80, 0.5);
+}
+
+.rsu-vested {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+.rsu-unvested {
+  color: var(--text-secondary);
+}
+
+/* Linked accounts section */
+.accounts-section {
+  margin: 20px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.accounts-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.account-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(42, 51, 80, 0.5);
+}
+
+.account-item:last-child {
+  border-bottom: none;
+}
+
+.account-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.account-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.account-balance {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Link account button */
+.link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--accent-blue);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.link-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-blue);
+}
+
+/* Bottom navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-item.active {
+  color: var(--accent-blue);
+}
+
+.nav-item:hover {
+  color: var(--text-primary);
+}
+
+.nav-icon {
+  font-size: 20px;
+}
+
+/* Holdings list */
+.holdings-section {
+  margin: 20px 16px;
+}
+
+.holdings-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.holding-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.holding-info h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.holding-info p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.holding-value {
+  text-align: right;
+}
+
+.holding-value .price {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.holding-value .change {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.holding-value .change.positive {
+  color: var(--accent-green);
+}
+
+.holding-value .change.negative {
+  color: var(--accent-red);
+}
+
+/* Settings / AI Advisor page */
+.page-container {
+  padding: 20px 16px;
+}
+
+.page-container h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+/* Calculator section */
+.calc-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.calc-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.btn-primary {
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Loading / empty states */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+/* Pension section */
+.pension-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.pension-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.pension-card .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.pension-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(42, 51, 80, 0.5);
+}
+
+.pension-stat:last-child {
+  border-bottom: none;
+}
+
+.pension-stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pension-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .app {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}

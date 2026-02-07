@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+.env.production
+client/build/
+server/data/
+*.log
+.DS_Store
+.aws-sam/
