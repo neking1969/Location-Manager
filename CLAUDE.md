@@ -112,7 +112,15 @@ bash lambda/deploy.sh
 
 ---
 
-## Recent Changes (2026-02-07)
+## Recent Changes (2026-02-08)
+
+1. ✅ **Budget totalFromMake Fix** - `budget.js` now uses Glide's `totalFromMake` as authoritative budget instead of calculating from line items (rate×unit×time). Scales line item amounts proportionally to match.
+2. ✅ **Live Glide Budget Fetch** - `/data` endpoint fetches fresh budgets from Glide on every request instead of reading stale S3 cache. Falls back to S3 if Glide is unreachable.
+3. ✅ **Topsheet Math.abs Bug** - Fixed in Shards-Ledger-App: category columns were using `Math.abs()` which counted refunds/credits as positive. Now uses signed amounts.
+4. ✅ **Data Verification** - All 50 locations verified: budget amounts match Glide's `totalFromMake` exactly. Fixed 4 previously mismatched: Ext. Warehouse ($39K→$15K), Police Station ($171K→$147K), Ryan's House ($169K→$174K), Ext.Roller Rink Alley ($0→$38K).
+5. ✅ **Budget vs Actuals Episode Headers Fix** - Episode header bars were using GL-only category sums for budget/actual/variance, ignoring non-GL categories. Now uses API's pre-calculated `ep.totalBudget`, `ep.totalActual`, and `ep.variance`. All episodes now show correct totals and green (under budget) status. File: `Shards-Ledger-App/src/app/budget/page.tsx`.
+
+### Previous Changes (2026-02-07)
 
 1. ✅ **GL-Based 10-Category System** - `categorizeTransaction()` maps GL codes to: Loc Fees, Addl. Site Fees, Equipment, Parking, Permits, Security, Police, Fire, Site Personnel, Addl. Labor
 2. ✅ **Per-Row GL & Episode Extraction** - Reads GL code (Column C) and episode (Column F) from each Excel row; filename is fallback only
@@ -160,6 +168,8 @@ bash lambda/deploy.sh
 8. **Episode is per-row in Excel** - Column F (`episode`), filename is fallback only
 9. **GL 6304/6305/6307/6342 = location labor** - Even from EP payroll vendor, these are location-specific costs
 10. **Budget episode resolution** - Requires traversing Glide relations: lineItem.budgetId → budget.episodeId
+11. **Category budgets ≠ totalFromMake** - Line item category budgets are scaled proportionally and may not sum to `totalFromMake`. Always use `ep.totalBudget` for authoritative totals, not category sums.
+12. **Dashboard headers vs detail tables** - Episode headers should use API pre-calculated totals; detail tables use per-category data. Don't recompute header totals from category sums.
 
 ---
 
