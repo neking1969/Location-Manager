@@ -8,8 +8,8 @@ import { createGlideClient } from '../src/glide/client.js';
 import { transformBudgetData } from '../src/parsers/budget.js';
 
 const ALL_CATEGORIES = [
-  'Loc Fees', 'Addl. Site Fees', 'Equipment', 'Parking', 'Permits',
-  'Security', 'Police', 'Fire', 'Site Personnel', 'Addl. Labor'
+  'Loc Fees', 'Addl. Site Fees', 'Site Personnel', 'Permits',
+  'Addl. Labor', 'Equipment', 'Parking', 'Fire', 'Police', 'Security'
 ];
 
 function generateComparison(budgets, ledgers) {
