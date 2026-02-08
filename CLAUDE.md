@@ -119,6 +119,8 @@ bash lambda/deploy.sh
 3. ✅ **Topsheet Math.abs Bug** - Fixed in Shards-Ledger-App: category columns were using `Math.abs()` which counted refunds/credits as positive. Now uses signed amounts.
 4. ✅ **Data Verification** - All 50 locations verified: budget amounts match Glide's `totalFromMake` exactly. Fixed 4 previously mismatched: Ext. Warehouse ($39K→$15K), Police Station ($171K→$147K), Ryan's House ($169K→$174K), Ext.Roller Rink Alley ($0→$38K).
 5. ✅ **Budget vs Actuals Episode Headers Fix** - Episode header bars were using GL-only category sums for budget/actual/variance, ignoring non-GL categories. Now uses API's pre-calculated `ep.totalBudget`, `ep.totalActual`, and `ep.variance`. All episodes now show correct totals and green (under budget) status. File: `Shards-Ledger-App/src/app/budget/page.tsx`.
+6. ✅ **GL Categories Expanded** - Added Equipment, Addl. Site Fees, Site Personnel to `GL_CATEGORIES` list in `/api/episodes/route.ts`. These are tracked via GL 6342 + description/transType matching. Only Addl. Labor remains non-GL.
+7. ✅ **Unified Category Table** - Merged GL and non-GL category tables into one aligned table. Removed separate "Non-GL Categories (Budget Only)" section. All categories now show Budget, Actual, Variance, Status in consistent columns.
 
 ### Previous Changes (2026-02-07)
 
@@ -170,6 +172,8 @@ bash lambda/deploy.sh
 10. **Budget episode resolution** - Requires traversing Glide relations: lineItem.budgetId → budget.episodeId
 11. **Category budgets ≠ totalFromMake** - Line item category budgets are scaled proportionally and may not sum to `totalFromMake`. Always use `ep.totalBudget` for authoritative totals, not category sums.
 12. **Dashboard headers vs detail tables** - Episode headers should use API pre-calculated totals; detail tables use per-category data. Don't recompute header totals from category sums.
+13. **GL 6342 subcategories** - GL 6342 maps to multiple budget categories via description: PARKING→Parking, PERMIT→Permits, DUMPSTER/TENTS→Equipment, STAGING/CLEANING→Addl. Site Fees, transType PR→Site Personnel, default→Loc Fees. All are trackable, not just Loc Fees.
+14. **Amplify caches API responses** - `/api/episodes` has `s-maxage=60`. After deploy, users need Cmd+Shift+R (hard refresh) or wait 60s to see updated data.
 
 ---
 
