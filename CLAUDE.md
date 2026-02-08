@@ -114,6 +114,10 @@ bash lambda/deploy.sh
 
 ## Recent Changes (2026-02-08)
 
+8. ✅ **Category Order Matches Glide** - Dashboard categories now display in Glide's budget view order instead of alphabetical: Loc Fees, Addl. Site Fees, Site Personnel, Permits, Addl. Labor, Equipment, Parking, Fire, Police, Security. Changed in `route.ts` (CATEGORY_ORDER) and `handler.js` (ALL_CATEGORIES).
+9. ✅ **Pre-computed Category Matching** - Dashboard now uses Lambda's pre-computed `tx.category` field instead of recalculating from GL codes. Fixes Equipment, Addl. Site Fees, and Site Personnel showing $0 actual (the dashboard's `getCategoryFromTransaction()` was missing GL 6342 subcategory handlers).
+10. ℹ️ **Addl. Labor Stays $0** - Investigated and confirmed: Addl. Labor has no GL code. Budget items are payroll positions (Layout Tech, A/C Operator, KALM, ALM, Bathroom Attendant, Snake Wrangler) that show as GL 6342 + PR in ledgers, same as Site Personnel. Splitting by name not worth complexity. Total budget: $292K.
+
 1. ✅ **Budget totalFromMake Fix** - `budget.js` now uses Glide's `totalFromMake` as authoritative budget instead of calculating from line items (rate×unit×time). Scales line item amounts proportionally to match.
 2. ✅ **Live Glide Budget Fetch** - `/data` endpoint fetches fresh budgets from Glide on every request instead of reading stale S3 cache. Falls back to S3 if Glide is unreachable.
 3. ✅ **Topsheet Math.abs Bug** - Fixed in Shards-Ledger-App: category columns were using `Math.abs()` which counted refunds/credits as positive. Now uses signed amounts.
@@ -174,6 +178,9 @@ bash lambda/deploy.sh
 12. **Dashboard headers vs detail tables** - Episode headers should use API pre-calculated totals; detail tables use per-category data. Don't recompute header totals from category sums.
 13. **GL 6342 subcategories** - GL 6342 maps to multiple budget categories via description: PARKING→Parking, PERMIT→Permits, DUMPSTER/TENTS→Equipment, STAGING/CLEANING→Addl. Site Fees, transType PR→Site Personnel, default→Loc Fees. All are trackable, not just Loc Fees.
 14. **Amplify caches API responses** - `/api/episodes` has `s-maxage=60`. After deploy, users need Cmd+Shift+R (hard refresh) or wait 60s to see updated data.
+15. **Use Lambda's pre-computed category** - Dashboard should use `tx.category` from Lambda, not recalculate. The Lambda's `categorizeTransaction()` has full GL 6342 subcategory logic; the dashboard's version was incomplete.
+16. **Addl. Labor has no GL code** - Budget items are payroll positions (Layout Tech, A/C Operator, KALM, ALM, etc.) that share GL 6342 + PR with Site Personnel. No way to distinguish without name-matching. $292K budget, $0 actual is expected.
+17. **Glide category display order** - Loc Fees, Addl. Site Fees, Site Personnel, Permits, Addl. Labor, Equipment, Parking, Fire, Police, Security. Defined as `CATEGORY_ORDER` in route.ts.
 
 ---
 
