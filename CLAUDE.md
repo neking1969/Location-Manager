@@ -112,14 +112,32 @@ bash lambda/deploy.sh
 
 ---
 
-## Recent Changes (2026-02-05)
+## Recent Changes (2026-02-07)
 
-1. ✅ **Category Breakdown per Location** - `byCategory` field on each location (Loc Fees, Security, Fire, Police, Rentals, Permits, Parking, Other)
+1. ✅ **GL-Based 10-Category System** - `categorizeTransaction()` maps GL codes to: Loc Fees, Addl. Site Fees, Equipment, Parking, Permits, Security, Police, Fire, Site Personnel, Addl. Labor
+2. ✅ **Per-Row GL & Episode Extraction** - Reads GL code (Column C) and episode (Column F) from each Excel row; filename is fallback only
+3. ✅ **Budget Parser** - New `src/parsers/budget.js` transforms Glide budget data with 3-step episode resolution
+4. ✅ **Multi-File Ledger Support** - Handler accepts arrays or CSV of ledger URLs
+5. ✅ **Location Recovery for Payroll** - Date-based recovery infers locations for payroll transactions (GL 6304/6305/6307/6342)
+6. ✅ **GL-Aware Production Overhead** - Payroll with location-labor GL codes stays as location spend, not overhead
+7. ✅ **Budget vs Actual Comparison** - Full pipeline: 50 locations matched, $5.5M actual vs $7.4M budget
+8. ✅ **Episode Budget Distribution** - "all" budgets distributed across active episodes
+9. ⏳ **Pending GL Codes** - Need Rentals, Permits, Parking GL codes from EP Accounting
+10. ⏳ **31 Unmapped Locations** - Extracted street names with $0 actual (no spend yet)
+
+### Test Results (2026-02-07)
+- 50 budgeted locations matched with transactions
+- 49 no-location transactions ($108K) — payroll items where location couldn't be inferred
+- 205 purchase orders tracked, 1 deposit detected
+- Lambda deployed and serving data successfully
+
+### Previous Changes (2026-02-05)
+
+1. ✅ **Category Breakdown per Location** - `byCategory` field on each location
 2. ✅ **GL Account Mapping** - 6304→Security, 6305→Police, 6307→Fire, 6342→Loc Fees
-3. ✅ **Deposit Detection** - Lambda identifies refundable deposits from transaction descriptions
-4. ✅ **Financial Breakdown Cards** - Summary UI: Invoiced, Deposits, Open POs, Total Committed, Remaining
-5. ✅ **Episodes 101/102 Combined** - Single block in dashboard matching EP Accounting
-6. ⏳ **Pending GL Codes** - Need Rentals, Permits, Parking GL codes from EP Accounting
+3. ✅ **Deposit Detection** - Lambda identifies refundable deposits
+4. ✅ **Financial Breakdown Cards** - Summary UI cards
+5. ✅ **Episodes 101/102 Combined** - Single block matching EP Accounting
 
 ### Previous Changes (2026-02-04)
 
@@ -138,6 +156,10 @@ bash lambda/deploy.sh
 4. **Episode 101+102 Block** - Accounting treats these as one block, all transactions show as "Episode 101"
 5. **Summary rows in ledgers** - Excel files have total rows that must be filtered out
 6. **Transaction-level GL accounts** - Use `transNumber` field (e.g., "6304"), not ledger-level `account` field
+7. **GL codes are per-row in Excel** - Column C (`accountnumber`), not per-file
+8. **Episode is per-row in Excel** - Column F (`episode`), filename is fallback only
+9. **GL 6304/6305/6307/6342 = location labor** - Even from EP payroll vendor, these are location-specific costs
+10. **Budget episode resolution** - Requires traversing Glide relations: lineItem.budgetId → budget.episodeId
 
 ---
 
