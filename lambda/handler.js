@@ -4,6 +4,8 @@ import { writeJsonToS3, readJsonFromS3 } from '../src/utils/s3Utils.js';
 import { writeProcessedLedger } from '../src/utils/writeProcessedData.js';
 import { parseFilename } from '../src/utils/fileUtils.js';
 import { categorizeTransaction } from '../src/parsers/ledger.js';
+import { createGlideClient } from '../src/glide/client.js';
+import { transformBudgetData } from '../src/parsers/budget.js';
 
 const ALL_CATEGORIES = [
   'Loc Fees', 'Addl. Site Fees', 'Equipment', 'Parking', 'Permits',
@@ -834,9 +836,30 @@ export async function handler(event, context) {
       }
     } else if (path.includes('/data')) {
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
-      const budgets = await readJsonFromS3('static/parsed-budgets.json').catch(() => null);
       const locationMappings = await readJsonFromS3('config/location-mappings.json').catch(() => ({ mappings: [] }));
       const smartpo = await readJsonFromS3('processed/parsed-smartpo.json').catch(() => null);
+
+      // Always fetch fresh budgets from Glide (never stale S3 cache)
+      let budgets = null;
+      try {
+        console.log('[Data] Fetching fresh budget data from Glide...');
+        const glide = createGlideClient();
+        const [glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets] = await Promise.all([
+          glide.getLocationsBudgets(),
+          glide.getBudgetLineItems(),
+          glide.getEpisodes(),
+          glide.getBudgets()
+        ]);
+        console.log(`[Data] Fetched ${glideLocationsBudgets.length} locations, ${glideBudgetLineItems.length} line items`);
+        budgets = transformBudgetData(glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets);
+        // Update S3 cache so it stays current
+        await writeJsonToS3('static/parsed-budgets.json', budgets).catch(e =>
+          console.warn('[Data] Failed to update S3 budget cache:', e.message)
+        );
+      } catch (e) {
+        console.warn('[Data] Glide budget fetch failed, falling back to S3 cache:', e.message);
+        budgets = await readJsonFromS3('static/parsed-budgets.json').catch(() => null);
+      }
 
       if (!ledgers || !budgets) {
         result = { error: 'Missing data files', budgets: !!budgets, ledgers: !!ledgers };
