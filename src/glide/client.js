@@ -190,6 +190,14 @@ export class GlideClient {
   }
 
   /**
+   * Get all locations budgets from Glide (parent records for budget line items)
+   */
+  async getLocationsBudgets() {
+    const rows = await this.getTableRows(TABLE_IDS.LOCATIONS_BUDGETS);
+    return rows.map(row => fromGlideRow('LOCATIONS_BUDGETS', row));
+  }
+
+  /**
    * Add new location to Glide
    */
   async addLocation(location) {

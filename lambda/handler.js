@@ -2,49 +2,59 @@ import { handleSync, handleApproval } from '../src/api/sync.js';
 import { downloadFile } from '../src/utils/downloadFile.js';
 import { writeJsonToS3, readJsonFromS3 } from '../src/utils/s3Utils.js';
 import { writeProcessedLedger } from '../src/utils/writeProcessedData.js';
+import { parseFilename } from '../src/utils/fileUtils.js';
+import { categorizeTransaction } from '../src/parsers/ledger.js';
 
-const GL_TO_BUDGET_CATEGORY = {
-  '6304': 'Security',
-  '6305': 'Police',
-  '6307': 'Fire',
-  '6342': 'Loc Fees'
-};
+const ALL_CATEGORIES = [
+  'Loc Fees', 'Addl. Site Fees', 'Equipment', 'Parking', 'Permits',
+  'Security', 'Police', 'Fire', 'Site Personnel', 'Addl. Labor'
+];
 
 function generateComparison(budgets, ledgers) {
   const comparison = {};
 
-  for (const item of budgets.byEpisodeCategory || []) {
-    if (!['Security', 'Police', 'Fire', 'Loc Fees', 'Permits', 'Parking'].includes(item.category)) continue;
-    const key = `${item.episode}|${item.category}`;
-    if (!comparison[key]) {
-      comparison[key] = {
-        episode: item.episode,
-        category: item.category,
-        budget: 0,
-        actual: 0,
-        isGlCategory: true
-      };
+  // Find active episodes from ledger transactions
+  const activeEps = new Set();
+  for (const ledger of ledgers.ledgers || []) {
+    for (const txn of ledger.transactions || []) {
+      const ep = txn.episode || ledger.episode;
+      if (ep && ep !== 'unknown') activeEps.add(ep);
     }
-    comparison[key].budget += item.totalBudget;
+  }
+
+  for (const item of budgets.byEpisodeCategory || []) {
+    if (!ALL_CATEGORIES.includes(item.category)) continue;
+    if (item.episode === 'all' && activeEps.size > 0) {
+      const perEp = item.totalBudget / activeEps.size;
+      for (const ep of activeEps) {
+        const key = `${ep}|${item.category}`;
+        if (!comparison[key]) {
+          comparison[key] = { episode: ep, category: item.category, budget: 0, actual: 0, isGlCategory: true };
+        }
+        comparison[key].budget += perEp;
+      }
+    } else {
+      const key = `${item.episode}|${item.category}`;
+      if (!comparison[key]) {
+        comparison[key] = { episode: item.episode, category: item.category, budget: 0, actual: 0, isGlCategory: true };
+      }
+      comparison[key].budget += item.totalBudget;
+    }
   }
 
   for (const ledger of ledgers.ledgers || []) {
     for (const txn of ledger.transactions || []) {
-      const glAccount = txn.transNumber?.substring(0, 4);
-      const category = GL_TO_BUDGET_CATEGORY[glAccount];
-      if (!category) continue;
+      const glAccount = txn.glCode || txn.transNumber?.substring(0, 4);
+      if (!glAccount) continue;
+
+      const category = categorizeTransaction(glAccount, txn.transType, txn.description);
+      if (category === 'Other') continue;
+
       const episode = txn.episode || ledger.episode;
       if (!episode || episode === 'unknown') continue;
       const key = `${episode}|${category}`;
       if (!comparison[key]) {
-        comparison[key] = {
-          episode,
-          category,
-          budget: 0,
-          actual: 0,
-          isGlCategory: true,
-          glAccount
-        };
+        comparison[key] = { episode, category, budget: 0, actual: 0, isGlCategory: true, glAccount };
       }
       comparison[key].actual += txn.amount || 0;
       comparison[key].glAccount = glAccount;
@@ -172,8 +182,12 @@ function extractDescriptionKeyword(description) {
   const colonMatch = description.match(/:([^:]+?)(?:\s*\(\d+\))?$/);
   if (colonMatch) {
     const extracted = colonMatch[1].trim();
-    // Filter out non-location fragments
-    if (extracted.length > 3 && !/^(FINAL|ADD'?L|SITE REP|IN HOUSE|NO WEEKENDS)$/i.test(extracted)) {
+    // Filter out non-location fragments and pay types
+    if (extracted.length > 3
+        && !/^(FINAL|ADD'?L|SITE REP|IN HOUSE|NO WEEKENDS)$/i.test(extracted)
+        && !/^(REGULAR|OVERTIME|OT|DOUBLE\s*TIME|GOLDEN\s*TIME|MEAL\s*PENALTY|FLSAOT)\s*/i.test(extracted)
+        && !/^\d+(\.\d+)?X$/i.test(extracted)
+        && !/\b(ALLOWANCE|RENTAL|MILEAGE|PER\s*DIEM|WORKED)\b/i.test(extracted)) {
       return extracted;
     }
   }
@@ -342,24 +356,89 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   }
 
   // Group transactions by matchedLocation
-  // Track payroll/overhead and service charges separately
+  // Track service charges separately; collect no-location transactions for episode totals
   const actualsByLocation = new Map();
-  let payrollTotal = 0;
-  let payrollCount = 0;
+  const noLocationTransactions = []; // Transactions with no location (e.g. EP payroll)
   let serviceChargeTotal = 0;
   let serviceChargeCount = 0;
   let descriptionOverrides = 0;
 
+  // Build date-to-location map from transactions that have locations
+  // Used to infer locations for payroll transactions by matching dates
+  const dateLocationMap = {};
   for (const ledger of ledgers.ledgers || []) {
     for (const tx of ledger.transactions || []) {
-      // Skip payroll and production overhead - they're not location spend
-      if (tx.overheadType === 'payroll' || tx.category === 'production_overhead') {
-        payrollTotal += Math.abs(tx.amount || 0);
-        payrollCount++;
-        continue;
+      if (!tx.location && !tx.matchedLocation) continue;
+      const loc = tx.matchedLocation || tx.location;
+      if (!loc || isGenericLocation(loc)) continue;
+      const ep = tx.episode || ledger.episode || 'unknown';
+      if (!tx.dateRange) continue;
+      const dateKey = tx.dateRange.startDate;
+      if (!dateKey) continue;
+      const mapKey = `${ep}|${dateKey}`;
+      if (!dateLocationMap[mapKey]) dateLocationMap[mapKey] = {};
+      dateLocationMap[mapKey][loc] = (dateLocationMap[mapKey][loc] || 0) + Math.abs(tx.amount || 1);
+    }
+  }
+  // Find most common location per episode+date
+  const bestLocationByDate = {};
+  for (const [key, locs] of Object.entries(dateLocationMap)) {
+    let best = null, bestAmt = 0;
+    for (const [loc, amt] of Object.entries(locs)) {
+      if (amt > bestAmt) { best = loc; bestAmt = amt; }
+    }
+    if (best) bestLocationByDate[key] = best;
+  }
+
+  // Find primary location per episode (highest total spend)
+  const episodeLocationSpend = {};
+  for (const ledger of ledgers.ledgers || []) {
+    for (const tx of ledger.transactions || []) {
+      const loc = tx.matchedLocation || tx.location;
+      if (!loc || isGenericLocation(loc)) continue;
+      const ep = tx.episode || ledger.episode || 'unknown';
+      if (!episodeLocationSpend[ep]) episodeLocationSpend[ep] = {};
+      episodeLocationSpend[ep][loc] = (episodeLocationSpend[ep][loc] || 0) + Math.abs(tx.amount || 0);
+    }
+  }
+  const episodePrimaryLocation = {};
+  for (const [ep, locs] of Object.entries(episodeLocationSpend)) {
+    let best = null, bestAmt = 0;
+    for (const [loc, amt] of Object.entries(locs)) {
+      if (amt > bestAmt) { best = loc; bestAmt = amt; }
+    }
+    if (best) episodePrimaryLocation[ep] = best;
+  }
+
+  for (const ledger of ledgers.ledgers || []) {
+    for (const tx of ledger.transactions || []) {
+      // Recovery: undo incorrect overhead tagging on location-related payroll
+      // GL 6304/6305/6307/6342 are ALL location spend even when from EP payroll
+      const txGl = tx.glCode || (tx.transNumber || '').substring(0, 4);
+      if (['6304', '6305', '6307', '6342'].includes(txGl) && tx.overheadType === 'payroll') {
+        tx.overheadType = null;
+        tx.category = tx.category === 'production_overhead' ? 'Unknown' : tx.category;
+        // Try to recover location from date matching
+        if (!tx.location && !tx.matchedLocation && tx.dateRange?.startDate) {
+          const ep = tx.episode || ledger.episode || 'unknown';
+          const dateKey = `${ep}|${tx.dateRange.startDate}`;
+          if (bestLocationByDate[dateKey]) {
+            tx.location = bestLocationByDate[dateKey];
+            tx.locationSource = 'date-recovery';
+          } else if (episodePrimaryLocation[ep]) {
+            tx.location = episodePrimaryLocation[ep];
+            tx.locationSource = 'episode-primary-recovery';
+          }
+        }
       }
 
       let locName = tx.matchedLocation || tx.location;
+
+      // Strip PENDING: prefix — these are recognized but not yet in Glide budgets
+      // Use the clean name so pendingLocations lookup works correctly
+      if (locName && locName.startsWith('PENDING:')) {
+        locName = locName.substring(8);
+      }
 
       // If location is generic, try to extract better name from description
       if (isGenericLocation(locName) && tx.description) {
@@ -370,7 +449,21 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
         }
       }
 
-      if (!locName) continue;
+      if (!locName) {
+        // No location — still track for episode-level category totals
+        noLocationTransactions.push({
+          vendor: tx.vendor,
+          amount: tx.amount,
+          description: tx.description,
+          category: tx.category,
+          episode: tx.episode,
+          transNumber: tx.transNumber,
+          transType: tx.transType,
+          glCode: tx.glCode,
+          glAccount: tx.glCode || tx.transNumber?.substring(0, 4)
+        });
+        continue;
+      }
 
       // Check if this is a service charge (skip from location matching)
       if (isServiceCharge(locName)) {
@@ -393,9 +486,10 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
         description: tx.description,
         category: tx.category,
         episode: tx.episode,
-        // GL account for category breakdown
+        transType: tx.transType,
         transNumber: tx.transNumber,
-        glAccount: tx.transNumber?.substring(0, 4)
+        glCode: tx.glCode,
+        glAccount: tx.glCode || tx.transNumber?.substring(0, 4)
       });
     }
   }
@@ -460,45 +554,18 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   const budgetedLocations = [];
   const processedBudgetKeys = new Set(budgetedMap.keys());
 
-  // GL account to category mapping for breakdown
-  const glToCategory = {
-    '6304': 'Security',
-    '6305': 'Police',
-    '6307': 'Fire',
-    '6342': 'Loc Fees'
-  };
-
-  // Calculate category breakdown from transactions
+  // Calculate category breakdown from transactions using categorizeTransaction()
   function calculateCategoryBreakdown(transactions) {
-    const breakdown = {
-      'Loc Fees': 0,
-      'Security': 0,
-      'Fire': 0,
-      'Rentals': 0,
-      'Permits': 0,
-      'Police': 0,
-      'Parking': 0,
-      'Other': 0
-    };
+    const breakdown = {};
+    for (const cat of ALL_CATEGORIES) breakdown[cat] = 0;
 
     for (const tx of transactions || []) {
-      const glAccount = (tx.glAccount || tx.transNumber || '').substring(0, 4);
-      const category = glToCategory[glAccount];
-
-      if (category) {
-        breakdown[category] += Math.abs(tx.amount || 0);
+      const glAccount = tx.glCode || (tx.glAccount || tx.transNumber || '').substring(0, 4);
+      const category = categorizeTransaction(glAccount, tx.transType, tx.description);
+      if (breakdown.hasOwnProperty(category)) {
+        breakdown[category] += (tx.amount || 0);
       } else {
-        // Try to infer from description
-        const desc = (tx.description || '').toUpperCase();
-        if (desc.includes('RENTAL') || desc.includes('EQUIPMENT')) {
-          breakdown['Rentals'] += Math.abs(tx.amount || 0);
-        } else if (desc.includes('PERMIT')) {
-          breakdown['Permits'] += Math.abs(tx.amount || 0);
-        } else if (desc.includes('PARKING') || desc.includes('PRKG')) {
-          breakdown['Parking'] += Math.abs(tx.amount || 0);
-        } else {
-          breakdown['Other'] += Math.abs(tx.amount || 0);
-        }
+        breakdown[category] = (tx.amount || 0);
       }
     }
 
@@ -586,26 +653,29 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   // Calculate summary - deposits are INCLUDED in invoiced (they're paid out)
   // but tracked separately for visibility (they're refundable at wrap)
   const invoicedAmount = budgetedLocations.reduce((sum, l) => sum + l.actualAmount, 0);
+  const noLocationTotal = noLocationTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+  const unmappedTotal = unmappedLocations.reduce((sum, l) => sum + l.totalAmount, 0);
+  const totalInvoiced = invoicedAmount + unmappedTotal + noLocationTotal;
   const summary = {
     totalBudget: budgetedLocations.reduce((sum, l) => sum + l.budgetAmount, 0),
-    totalActual: budgetedLocations.reduce((sum, l) => sum + l.actualAmount, 0),
-    totalUnmapped: unmappedLocations.reduce((sum, l) => sum + l.totalAmount, 0),
+    totalActual: totalInvoiced,
+    totalUnmapped: unmappedTotal,
     totalVariance: 0,
     locationsWithBudget: budgetByLocation.size,
     locationsWithActuals: budgetedLocations.filter(l => l.hasActuals).length,
     locationsOverBudget: budgetedLocations.filter(l => l.isOverBudget).length,
     unmappedTransactionCount: unmappedLocations.reduce((sum, l) => sum + l.transactions.length, 0),
     // Financial breakdown (Kirsten's methodology)
-    invoiced: invoicedAmount,
+    invoiced: totalInvoiced,
     openPOs: totalOpenPOAmount,
-    totalCommitted: invoicedAmount + totalOpenPOAmount,
+    totalCommitted: totalInvoiced + totalOpenPOAmount,
     openPOCount: openPOs.length,
     totalPOCount: smartpo?.totalPOs || 0,
     // Deposits (included in invoiced, but tracked separately - refundable at wrap)
     deposits: totalDeposits,
     depositCount: depositCount,
     // Net spend = invoiced minus deposits (what's actually "spent" vs "held")
-    netInvoiced: invoicedAmount - totalDeposits
+    netInvoiced: totalInvoiced - totalDeposits
   };
   summary.totalVariance = summary.totalBudget - summary.totalActual;
   // Variance including committed POs
@@ -629,6 +699,9 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       count: depositCount,
       transactions: depositTransactions
     },
+    // Transactions with no location (EP payroll for police/fire/security)
+    // Dashboard uses these for episode-level category totals
+    noLocationTransactions,
     generatedAt: new Date().toISOString()
   };
 }
@@ -648,23 +721,46 @@ export async function handler(event, context) {
   try {
     const body = JSON.parse(event.body || '{}');
     const path = event.path || event.rawPath || '';
+    console.log('[Handler] Path:', path, 'Method:', event.httpMethod || event.requestContext?.http?.method);
+    console.log('[Handler] Body keys:', Object.keys(body).join(', '));
+    console.log('[Handler] Body preview:', JSON.stringify(body).substring(0, 500));
 
     let result;
     if (path.includes('/sync')) {
       const syncInput = {};
 
-      if (body.ledgerFileUrl) {
-        console.log('[Handler] Downloading ledger file from URL:', body.ledgerFileUrl);
-        const ledgerFile = await downloadFile(body.ledgerFileUrl);
-        syncInput.ledgerFiles = [ledgerFile];
-        console.log('[Handler] Ledger file downloaded:', ledgerFile.filename, ledgerFile.buffer.length, 'bytes');
+      // Support multiple ledger files (array, comma-separated string, or single URL)
+      let ledgerUrls = body.ledgerFileUrls && body.ledgerFileUrls.length > 0
+        ? body.ledgerFileUrls
+        : body.ledgerFileUrl
+          ? body.ledgerFileUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'))
+          : [];
+      if (ledgerUrls.length > 0) {
+        console.log(`[Handler] Downloading ${ledgerUrls.length} ledger file(s)...`);
+        syncInput.ledgerFiles = [];
+        for (const url of ledgerUrls) {
+          try {
+            const ledgerFile = await downloadFile(url);
+            syncInput.ledgerFiles.push(ledgerFile);
+            console.log(`[Handler] Downloaded: ${ledgerFile.filename} (${ledgerFile.buffer.length} bytes)`);
+          } catch (e) {
+            console.warn(`[Handler] Failed to download ledger: ${e.message}`);
+          }
+        }
+        console.log(`[Handler] Downloaded ${syncInput.ledgerFiles.length}/${ledgerUrls.length} ledger files`);
       }
 
-      if (body.smartpoFileUrl) {
+      // Support multiple SmartPO files (array, comma-separated string, or single URL)
+      const smartpoUrls = body.smartpoFileUrls && body.smartpoFileUrls.length > 0
+        ? body.smartpoFileUrls
+        : body.smartpoFileUrl
+          ? body.smartpoFileUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'))
+          : [];
+      if (smartpoUrls.length > 0) {
         try {
-          console.log('[Handler] Downloading SmartPO file from URL:', body.smartpoFileUrl);
-          syncInput.smartpoFile = await downloadFile(body.smartpoFileUrl);
-          console.log('[Handler] SmartPO file downloaded:', syncInput.smartpoFile.filename);
+          console.log(`[Handler] Downloading SmartPO file from URL: ${smartpoUrls[0]}`);
+          syncInput.smartpoFile = await downloadFile(smartpoUrls[0]);
+          console.log(`[Handler] SmartPO file downloaded: ${syncInput.smartpoFile.filename}`);
         } catch (e) {
           console.warn('[Handler] SmartPO download failed (optional):', e.message);
         }
@@ -690,12 +786,17 @@ export async function handler(event, context) {
           syncSessionId: body.syncSessionId || Date.now().toString(),
           sessionName: body.syncSessionName || 'sync'
         }, {
-          ledgerBuffer: syncInput.ledgerFiles?.[0]?.buffer,
-          ledgerFilename: syncInput.ledgerFiles?.[0]?.filename,
+          ledgerFiles: syncInput.ledgerFiles || [],
           smartpoBuffer: syncInput.smartpoFile?.buffer,
           smartpoFilename: syncInput.smartpoFile?.filename
         });
         console.log('[Handler] Persisted enriched ledger data to S3');
+      }
+
+      // Always write budget data to S3 when available (even without ledger upload)
+      if (result.success && result.budgetData) {
+        await writeJsonToS3('static/parsed-budgets.json', result.budgetData);
+        console.log('[Handler] Wrote budget data to S3');
       }
     } else if (path.includes('/approve')) {
       result = await handleApproval(body);
@@ -740,19 +841,97 @@ export async function handler(event, context) {
       if (!ledgers || !budgets) {
         result = { error: 'Missing data files', budgets: !!budgets, ledgers: !!ledgers };
       } else {
-        // Deduplicate ledgers by latest reportDate
+        // FIRST: Recover episode/account from filename for ledgers stored with "unknown"
+        // Must happen before dedup so recovered episodes merge correctly
+        for (const ledger of ledgers.ledgers || []) {
+          if (ledger.episode === 'unknown' && ledger.filename) {
+            const fileInfo = parseFilename(ledger.filename);
+            if (fileInfo) {
+              ledger.episode = fileInfo.episode;
+              ledger.account = fileInfo.account;
+              for (const txn of ledger.transactions || []) {
+                if (txn.episode === 'unknown') txn.episode = fileInfo.episode;
+                if (txn.account === 'unknown') txn.account = fileInfo.account;
+              }
+              console.log(`[Handler] Recovered episode=${fileInfo.episode} account=${fileInfo.account} from filename: ${ledger.filename}`);
+            }
+          }
+        }
+
+        // THEN: Deduplicate ledgers by episode-account key (keep latest reportDate)
         if (ledgers.ledgers && Array.isArray(ledgers.ledgers)) {
           const latestLedgers = {};
           for (const ledger of ledgers.ledgers) {
             const key = `${ledger.episode}-${ledger.account}`;
-            if (!latestLedgers[key] || ledger.reportDate > latestLedgers[key].reportDate) {
+            if (!latestLedgers[key] || (ledger.reportDate || '') > (latestLedgers[key].reportDate || '')) {
               latestLedgers[key] = ledger;
             }
           }
+          const beforeCount = ledgers.ledgers.length;
           ledgers.ledgers = Object.values(latestLedgers);
+          if (beforeCount !== ledgers.ledgers.length) {
+            console.log(`[Handler] Deduplicated ledgers: ${beforeCount} -> ${ledgers.ledgers.length}`);
+          }
         }
 
         result = generateLocationComparison(budgets, ledgers, locationMappings, smartpo);
+        result.episodeTotals = budgets.episodeTotals || {};
+        result.byEpisodeCategory = budgets.byEpisodeCategory || [];
+
+        // Distribute "all" budget across episodes with GL actuals
+        // Glide budgets are per-location (not per-episode), so most items have episode="all"
+        // The dashboard needs episode-keyed budgets to show per-episode comparisons
+        if (result.episodeTotals.all != null) {
+          const allBudget = result.episodeTotals.all;
+          delete result.episodeTotals.all;
+
+          const activeEps = new Set();
+          for (const ledger of ledgers.ledgers || []) {
+            if (ledger.episode && ledger.episode !== 'unknown') {
+              activeEps.add(ledger.episode);
+            }
+          }
+
+          if (activeEps.size > 0) {
+            const perEp = allBudget / activeEps.size;
+            for (const ep of activeEps) {
+              result.episodeTotals[ep] = (result.episodeTotals[ep] || 0) + perEp;
+            }
+            console.log(`[Handler] Distributed $${allBudget.toFixed(0)} "all" budget across ${activeEps.size} episodes ($${perEp.toFixed(0)} each)`);
+          } else {
+            result.episodeTotals.all = allBudget;
+          }
+        }
+
+        // Same for byEpisodeCategory
+        if (result.byEpisodeCategory?.length > 0) {
+          const activeEps = new Set();
+          for (const ledger of ledgers.ledgers || []) {
+            if (ledger.episode && ledger.episode !== 'unknown') {
+              activeEps.add(ledger.episode);
+            }
+          }
+
+          if (activeEps.size > 0) {
+            const allItems = result.byEpisodeCategory.filter(i => i.episode === 'all');
+            const nonAllItems = result.byEpisodeCategory.filter(i => i.episode !== 'all');
+
+            for (const item of allItems) {
+              const perEp = item.totalBudget / activeEps.size;
+              for (const ep of activeEps) {
+                const existing = nonAllItems.find(
+                  i => i.episode === ep && i.category === item.category
+                );
+                if (existing) {
+                  existing.totalBudget += perEp;
+                } else {
+                  nonAllItems.push({ episode: ep, category: item.category, totalBudget: perEp });
+                }
+              }
+            }
+            result.byEpisodeCategory = nonAllItems;
+          }
+        }
       }
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };

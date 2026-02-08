@@ -23,9 +23,9 @@ export const COLUMNS = {
   // Budgets table columns
   BUDGETS: {
     episode: 'Name',
+    episodeId: '6eqIy',
     total: 'YQnMt',
     totalCosts: 'N5cHA',
-    // Add more as needed from your Glide definitions
   },
 
   // Vendors table columns

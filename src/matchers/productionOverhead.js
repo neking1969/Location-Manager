@@ -102,9 +102,11 @@ export function categorizeProductionOverhead(parsedLedgers) {
       stats.totalChecked++;
       const amount = Math.abs(txn.amount || 0);
 
-      // ALWAYS check for payroll first - even if location was inferred
-      // This fixes the bug where payroll was incorrectly assigned to locations like "FLSAOT"
-      if (isPayrollTransaction(txn)) {
+      // Check for payroll — but GL 6304/6305/6307/6342 payroll
+      // IS location spend (officers, firefighters, site personnel)
+      const txnGl = txn.glCode || (txn.transNumber || '').substring(0, 4);
+      const isLocationLabor = ['6304', '6305', '6307', '6342'].includes(txnGl);
+      if (!isLocationLabor && isPayrollTransaction(txn)) {
         txn.category = 'production_overhead';
         txn.overheadType = 'payroll';
         txn.locationRequired = false;

@@ -31,8 +31,20 @@ export async function writeProcessedLedger(results, sessionInfo, originalFiles =
   const writtenPaths = {};
 
   try {
-    // 1. Archive original ledger file to S3 (optional redundancy)
-    if (originalFiles.ledgerBuffer && originalFiles.ledgerFilename) {
+    // 1. Archive original ledger file(s) to S3 (optional redundancy)
+    if (originalFiles.ledgerFiles && originalFiles.ledgerFiles.length > 0) {
+      writtenPaths.archivedLedgers = [];
+      for (const file of originalFiles.ledgerFiles) {
+        const archiveKey = `archives/ledgers/${dateStr}-${sessionSlug}-${file.filename}`;
+        const archiveResult = await uploadFileToS3(
+          archiveKey,
+          file.buffer,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        writtenPaths.archivedLedgers.push(archiveResult);
+        console.log(`[Write] Archived ledger to S3: ${archiveKey}`);
+      }
+    } else if (originalFiles.ledgerBuffer && originalFiles.ledgerFilename) {
       const archiveKey = `archives/ledgers/${dateStr}-${sessionSlug}-${originalFiles.ledgerFilename}`;
       const archiveResult = await uploadFileToS3(
         archiveKey,
@@ -147,6 +159,14 @@ export async function writeProcessedLedger(results, sessionInfo, originalFiles =
       await writeJsonToS3(smartpoKey, smartpoData);
       writtenPaths.parsedSmartPO = { key: smartpoKey };
       console.log(`[Write] Wrote parsed SmartPO: ${smartpoData.totalPOs} POs, $${smartpoData.totalAmount.toFixed(2)} total`);
+    }
+
+    // 7. Write budget data to S3 (if available)
+    if (results.budgetData) {
+      const budgetKey = 'static/parsed-budgets.json';
+      await writeJsonToS3(budgetKey, results.budgetData);
+      writtenPaths.parsedBudgets = { key: budgetKey };
+      console.log(`[Write] Wrote budget data: ${results.budgetData.byLocationEpisode.length} location-episodes`);
     }
 
     console.log(`[Write] S3 write complete - ${Object.keys(writtenPaths).length} files written`);

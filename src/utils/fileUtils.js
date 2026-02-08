@@ -72,7 +72,9 @@ export function listFiles(dirPath, extensions = []) {
  */
 export function parseFilename(filename) {
   // Pattern: EPISODE ACCOUNT MMDDYY.ext or EPISODE ACCOUNT-ACCOUNT MMDDYY.ext
-  const match = filename.match(/^(\d{3})\s+(\d{4}(?:-\d{4})?)\s+(\d{6})\.(pdf|xlsx|jpg)$/i);
+  // Allow pattern anywhere in filename (handles prefixed filenames from Glide/Make.com)
+  // Handles suffixes like [27] or (1) before extension (e.g., "104 6304-6342 013026[27].xlsx", "105 6304-6342 020626 (1).xlsx")
+  const match = filename.match(/(\d{3})\s+(\d{4}(?:-\d{4})?)\s+(\d{6})(?:\[\d+\])?(?:\s*\(\d+\))?\.(pdf|xlsx|jpg)$/i);
   if (!match) {
     return null;
   }

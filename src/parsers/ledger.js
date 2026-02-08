@@ -5,14 +5,41 @@
 import XLSX from 'xlsx';
 import { parseFilename, generateHash } from '../utils/fileUtils.js';
 
-// Account code to category mapping
-const ACCOUNT_CATEGORIES = {
+// GL account code to Glide budget category mapping
+// GL 6304/6305/6307 map directly; GL 6342 requires description-based subcategorization
+const GL_CATEGORIES = {
   '6304': 'Security',
   '6305': 'Police',
-  '6307': 'Fire',
-  '6342': 'Loc Fees',
-  'PR': 'Equipment/Labor'
+  '6307': 'Fire'
 };
+
+/**
+ * Categorize a transaction into one of the 10 Glide budget categories
+ * based on GL code, transaction type (AP/PR), and description keywords.
+ *
+ * Categories: Loc Fees, Addl. Site Fees, Equipment, Parking, Permits,
+ *             Security, Police, Fire, Site Personnel, Addl. Labor
+ */
+function categorizeTransaction(glCode, transType, description) {
+  const gl = String(glCode || '').trim();
+
+  if (GL_CATEGORIES[gl]) return GL_CATEGORIES[gl];
+
+  if (gl === '6342') {
+    if (transType === 'PR') return 'Site Personnel';
+
+    const desc = (description || '').toUpperCase();
+
+    if (/PARKING|PRKG|BASECAMP/.test(desc)) return 'Parking';
+    if (/PERMITS?(?!\s*(?:SERVICE|SVC)\s*FEE)/.test(desc)) return 'Permits';
+    if (/DUMPSTER|RESTROOM|GLOBUG|TENTS?[\/\s]|TABLES?[\/\s]|CHAIRS?|LIGHTS?[\/\s]|HEATERS?|CONES|SUPPORT\s*TRUCK|HMU\s*STATION/.test(desc)) return 'Equipment';
+    if (/STAGING|CAR\s*RELO|PRESSURE\s*WASH|EDISON\s*BOX|INCON(?:VENIENCE)?\s*FEE|MOVERS?\s*FEE|CLEANING|PRE\s*DAY|FSO/.test(desc)) return 'Addl. Site Fees';
+
+    return 'Loc Fees';
+  }
+
+  return 'Other';
+}
 
 /**
  * Extract date range from description field
@@ -178,7 +205,9 @@ function extractLocationFromDescription(description) {
     'CLOSEOUT INV', 'FINAL INVOICE', 'REINSTATEMENT',
     'PERMIT SERVICE FEE', '12 TON PORTABLE AC',
     'PERMIT SVC', 'PERMIT SVC FEE',
-    'FINAL', 'SITE REP'
+    'FINAL', 'SITE REP',
+    'FLSAOT', 'PERSONNEL',
+    '6TH DAY WORKED 1.5X'
   ]);
 
   const isNotLocation = (str) => {
@@ -220,7 +249,9 @@ function extractLocationFromDescription(description) {
     /^\d+\.?\d*X$/i,
     /^FLAT\s*RATE/i,
     /^DAILY\s*RATE/i,
-    /^WEEKLY\s*RATE/i
+    /^WEEKLY\s*RATE/i,
+    /^\d+(?:ST|ND|RD|TH)\s+DAY\s+WORKED/i,
+    /^FLSAOT$/i
   ];
 
   const isPayType = (str) => {
@@ -315,7 +346,8 @@ function extractLocationFromDescription(description) {
   const colonMatch = desc.match(/:\s*(?:I\/E\s+)?([A-Z0-9][A-Z0-9\s\-\'\.\/]+?)(?:\s*\(\d+\))?$/i);
   if (colonMatch) {
     const loc = cleanLocation(colonMatch[1]);
-    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)) {
+    if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)
+        && !/^M-\d+$/.test(loc)) {
       return loc;
     }
   }
@@ -473,10 +505,21 @@ export function parseExcelLedger(buffer, filename) {
     if (headerRowIndex === -1) continue;
 
     const headers = data[headerRowIndex].map(h => String(h || '').toLowerCase().trim());
-    const locationCol = headers.findIndex(h => h.includes('locationcode') || h.includes('location') || h.includes('set'));
+
+    // Column C: GL account code = "AccountNumber" (6304, 6305, 6307, 6342)
+    // NOT Column B "ProjectOrGlProd" which is the show code (E62W)
+    const glCol = headers.findIndex(h => h === 'accountnumber' || h.startsWith('accountnum'));
+    // Column D: Account description (e.g., "LOCATION SECURITY", "FEES & PERMITS")
+    const acctDescCol = headers.findIndex(h => h.startsWith('accountd'));
+    // Column F: Episode code per row
+    const episodeCol = headers.findIndex(h => h.startsWith('episode'));
+    // Column S: Transaction type (AP or PR)
+    const transTypeCol = headers.findIndex(h => h.startsWith('transtype'));
+
+    const locationCol = headers.findIndex(h => h.includes('locationcode') || (h.includes('location') && !h.startsWith('projector') && !h.startsWith('accountd')));
     const vendorCol = headers.findIndex(h => h.includes('vendorname') || h.includes('vendor') || h.includes('payee'));
     const amountCol = headers.findIndex(h => h.includes('amount') || h.includes('total'));
-    const transNumCol = headers.findIndex(h => h.includes('trans') || h.includes('po') || h.includes('number'));
+    const transNumCol = headers.findIndex(h => h === 'ponumber' || h === 'documentnumber');
     // Be specific: match 'description' exactly (not 'accountdesc') or 'memo'
     const descCol = headers.findIndex(h => h === 'description' || h === 'memo' || h === 'desc');
 
@@ -485,20 +528,33 @@ export function parseExcelLedger(buffer, filename) {
       const row = data[i];
       if (!row || row.length === 0) continue;
 
+      // Read per-row values
+      const rowGl = glCol >= 0 ? String(row[glCol] || '').trim() : '';
+      const rowEpisode = episodeCol >= 0 ? String(row[episodeCol] || '').trim() : '';
+      const rowTransType = transTypeCol >= 0 ? String(row[transTypeCol] || '').trim() : '';
       const location = locationCol >= 0 ? String(row[locationCol] || '').trim() : '';
       const vendor = vendorCol >= 0 ? String(row[vendorCol] || '').trim() : '';
       const amount = amountCol >= 0 ? parseFloat(row[amountCol]) || 0 : 0;
       const transNumber = transNumCol >= 0 ? String(row[transNumCol] || '').trim() : '';
       const description = descCol >= 0 ? String(row[descCol] || '').trim() : '';
 
-      // Skip summary/total rows (no vendor AND no description)
-      // These are Excel totals that should not be processed
-      if (!vendor && !description) {
+      // Skip summary/total rows: no GL code AND no vendor AND no description (only amount)
+      if (!rowGl && !vendor && !description) {
         continue;
       }
 
       // Only include rows with non-zero amounts (filters out headers, footers, empty rows)
       if (amount !== 0) {
+        // Per-row GL code from Column C, fallback to filename
+        const glCode = rowGl || fileInfo?.account || 'unknown';
+        // Per-row episode from Column F, fallback to filename
+        const episode = rowEpisode || fileInfo?.episode || 'unknown';
+        // Transaction type from Column S (AP = vendor invoice, PR = payroll)
+        const transType = rowTransType.toUpperCase();
+
+        // Categorize using GL code + transType + description
+        const category = categorizeTransaction(glCode, transType, description);
+
         // Extract location name from description if location code is just a number
         const extractedLocation = extractLocationFromDescription(description);
         const locationName = extractedLocation || (location && !/^\d+$/.test(location) ? location : '');
@@ -515,9 +571,11 @@ export function parseExcelLedger(buffer, filename) {
           transNumber,
           description,
           sheet: sheetName,
-          episode: fileInfo?.episode || 'unknown',
-          account: fileInfo?.account || 'unknown',
-          category: ACCOUNT_CATEGORIES[fileInfo?.account] || 'Unknown',
+          episode,
+          account: glCode,
+          glCode,
+          transType,
+          category,
           reportDate,
           dateRange: dateRange || null
         };
@@ -539,7 +597,6 @@ export function parseExcelLedger(buffer, filename) {
     filename,
     episode: fileInfo?.episode || 'unknown',
     account: fileInfo?.account || 'unknown',
-    category: ACCOUNT_CATEGORIES[fileInfo?.account] || 'Unknown',
     reportDate: fileInfo?.date || new Date().toISOString().split('T')[0],
     transactions,
     transactionCount: transactions.length
@@ -575,6 +632,7 @@ export function parseLedgerFiles(files) {
 }
 
 export {
+  categorizeTransaction,
   extractDateRangeFromDescription,
   expandDateRange
 };
@@ -582,7 +640,8 @@ export {
 export default {
   parseExcelLedger,
   parseLedgerFiles,
-  ACCOUNT_CATEGORIES,
+  categorizeTransaction,
+  GL_CATEGORIES,
   extractDateRangeFromDescription,
   expandDateRange
 };

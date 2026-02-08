@@ -12,6 +12,7 @@ import { runLocationInference } from '../matchers/dateLocation.js';
 import { buildVendorLocationMap, inferLocationsFromVendor } from '../matchers/vendorLocationMap.js';
 import { categorizeProductionOverhead } from '../matchers/productionOverhead.js';
 import { createGlideClient } from '../glide/client.js';
+import { transformBudgetData } from '../parsers/budget.js';
 
 /**
  * Main sync handler
@@ -59,6 +60,37 @@ export async function handleSync(input) {
     } catch (e) {
       console.error('[Sync] Glide vendors error:', e.message);
       glideApiErrors.push({ source: 'vendors', error: e.message });
+    }
+
+    let glideBudgetLineItems = [];
+    let glideLocationsBudgets = [];
+    let glideEpisodes = [];
+    let glideBudgets = [];
+
+    try {
+      console.log('[Sync] Fetching Glide budget data...');
+      [glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets] = await Promise.all([
+        glide.getLocationsBudgets(),
+        glide.getBudgetLineItems(),
+        glide.getEpisodes(),
+        glide.getBudgets()
+      ]);
+      console.log(`[Sync] Fetched ${glideLocationsBudgets.length} locations budgets, ${glideBudgetLineItems.length} line items, ${glideEpisodes.length} episodes, ${glideBudgets.length} budgets`);
+      console.log(`[Sync] Episodes: ${glideEpisodes.map(e => e.episode).sort().join(', ')}`);
+    } catch (e) {
+      console.error('[Sync] Glide budget data error:', e.message);
+      glideApiErrors.push({ source: 'budgets', error: e.message });
+    }
+
+    if (glideBudgetLineItems.length > 0) {
+      try {
+        results.budgetData = transformBudgetData(glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets);
+        console.log(`[Sync] Budget data: ${results.budgetData.byLocationEpisode.length} location-episodes, ${results.budgetData.byEpisodeCategory.length} episode-categories`);
+      } catch (e) {
+        console.error('[Sync] Budget transformation error:', e.message);
+        results.warnings = results.warnings || [];
+        results.warnings.push(`Budget transformation error: ${e.message}`);
+      }
     }
 
     if (glideApiErrors.length > 0) {
