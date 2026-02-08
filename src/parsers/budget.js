@@ -161,25 +161,36 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
   const byLocationEpisode = Array.from(locEpMap.values());
   const byEpisodeCategory = Array.from(epCatMap.values());
 
+  // Use totalFromMake as authoritative budget when available (from Glide spreadsheet)
+  // Line item calculations can diverge from the original budget spreadsheet totals
+  for (const loc of locationsBudgets || []) {
+    const authoritative = parseFloat(loc.totalFromMake) || 0;
+    if (authoritative <= 0) continue;
+
+    const locName = loc.locationUserInput || loc.locationName;
+    const locEntries = byLocationEpisode.filter(item => item.location === locName);
+    const calculated = locEntries.reduce((sum, item) => sum + item.totalBudget, 0);
+
+    if (locEntries.length === 0) {
+      // Location has a budget in Glide but no line items — add it
+      const locRowId = loc.$rowID;
+      const episodeName = locationBudgetEpisodeLookup.get(locRowId) || 'all';
+      byLocationEpisode.push({ location: locName, episode: episodeName, totalBudget: authoritative });
+      console.log(`[Budget] Added missing location ${locName}: $${authoritative.toFixed(0)} (no line items)`);
+    } else if (Math.abs(authoritative - calculated) > 1) {
+      // Scale line item amounts to match authoritative total
+      const scale = authoritative / calculated;
+      for (const entry of locEntries) {
+        entry.totalBudget *= scale;
+      }
+      console.log(`[Budget] Corrected ${locName}: calculated $${calculated.toFixed(0)} -> authoritative $${authoritative.toFixed(0)}`);
+    }
+  }
+
   const episodeTotals = {};
   for (const item of byLocationEpisode) {
     if (!episodeTotals[item.episode]) episodeTotals[item.episode] = 0;
     episodeTotals[item.episode] += item.totalBudget;
-  }
-
-  // Cross-check: compare calculated totals vs totalFromMake on parent records
-  for (const loc of locationsBudgets || []) {
-    const expectedTotal = parseFloat(loc.totalFromMake) || 0;
-    if (expectedTotal > 0) {
-      const locName = loc.locationUserInput || loc.locationName;
-      const actualTotal = byLocationEpisode
-        .filter(item => item.location === locName)
-        .reduce((sum, item) => sum + item.totalBudget, 0);
-      const diff = Math.abs(expectedTotal - actualTotal);
-      if (diff > expectedTotal * 0.05) {
-        console.warn(`[Budget] Total mismatch for ${locName}: expected $${expectedTotal.toFixed(2)}, calculated $${actualTotal.toFixed(2)} (diff: $${diff.toFixed(2)})`);
-      }
-    }
   }
 
   console.log(`[Budget] Transformed: ${byLocationEpisode.length} location-episodes, ${byEpisodeCategory.length} episode-categories, ${Object.keys(episodeTotals).length} episode groups`);
