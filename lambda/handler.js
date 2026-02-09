@@ -2,7 +2,7 @@ import { handleSync, handleApproval } from '../src/api/sync.js';
 import { downloadFile } from '../src/utils/downloadFile.js';
 import { writeJsonToS3, readJsonFromS3 } from '../src/utils/s3Utils.js';
 import { writeProcessedLedger } from '../src/utils/writeProcessedData.js';
-import { parseFilename } from '../src/utils/fileUtils.js';
+import { parseFilename, generateHash } from '../src/utils/fileUtils.js';
 import { categorizeTransaction } from '../src/parsers/ledger.js';
 import { createGlideClient } from '../src/glide/client.js';
 import { transformBudgetData } from '../src/parsers/budget.js';
@@ -454,6 +454,7 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       if (!locName) {
         // No location — still track for episode-level category totals
         noLocationTransactions.push({
+          txId: tx.txId,
           vendor: tx.vendor,
           amount: tx.amount,
           description: tx.description,
@@ -462,7 +463,8 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
           transNumber: tx.transNumber,
           transType: tx.transType,
           glCode: tx.glCode,
-          glAccount: tx.glCode || tx.transNumber?.substring(0, 4)
+          glAccount: tx.glCode || tx.transNumber?.substring(0, 4),
+          _override: tx._override || null
         });
         continue;
       }
@@ -481,6 +483,7 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       const loc = actualsByLocation.get(key);
       loc.totalAmount += tx.amount || 0;
       loc.transactions.push({
+        txId: tx.txId,
         vendor: tx.vendor,
         amount: tx.amount,
         extractedLocation: tx.location,
@@ -491,7 +494,11 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
         transType: tx.transType,
         transNumber: tx.transNumber,
         glCode: tx.glCode,
-        glAccount: tx.glCode || tx.transNumber?.substring(0, 4)
+        glAccount: tx.glCode || tx.transNumber?.substring(0, 4),
+        effectiveDate: tx.reportDate,
+        poNumber: tx.transNumber,
+        documentNumber: tx.transNumber,
+        _override: tx._override || null
       });
     }
   }
@@ -834,10 +841,87 @@ export async function handler(event, context) {
         };
         console.log(`[Handler] Saved ${newMappings.length} new mappings, total: ${finalMappings.length}`);
       }
+    } else if (path.includes('/overrides')) {
+      const method = event.httpMethod || event.requestContext?.http?.method || 'POST';
+      if (method === 'GET') {
+        try {
+          const data = await readJsonFromS3('config/transaction-overrides.json');
+          result = data;
+        } catch (e) {
+          result = { overrides: [], updatedAt: null };
+        }
+      } else if (method === 'DELETE') {
+        const existing = await readJsonFromS3('config/transaction-overrides.json')
+          .catch(() => ({ overrides: [] }));
+        const filtered = (existing.overrides || []).filter(o => o.txId !== body.txId);
+        await writeJsonToS3('config/transaction-overrides.json', {
+          overrides: filtered,
+          updatedAt: new Date().toISOString()
+        });
+        result = { success: true, removedTxId: body.txId, totalOverrides: filtered.length };
+        console.log(`[Handler] Removed override for txId=${body.txId}, remaining: ${filtered.length}`);
+      } else {
+        // POST: add or update an override
+        const existing = await readJsonFromS3('config/transaction-overrides.json')
+          .catch(() => ({ overrides: [] }));
+        const overrides = existing.overrides || [];
+
+        const override = {
+          txId: body.txId,
+          originalEpisode: body.originalEpisode || null,
+          originalLocation: body.originalLocation || null,
+          originalCategory: body.originalCategory || null,
+          newEpisode: body.newEpisode || null,
+          newLocation: body.newLocation || null,
+          newCategory: body.newCategory || null,
+          reason: body.reason || '',
+          createdAt: new Date().toISOString(),
+          createdBy: 'dashboard'
+        };
+
+        // Upsert by txId
+        const idx = overrides.findIndex(o => o.txId === body.txId);
+        if (idx >= 0) {
+          overrides[idx] = override;
+        } else {
+          overrides.push(override);
+        }
+
+        await writeJsonToS3('config/transaction-overrides.json', {
+          overrides,
+          updatedAt: new Date().toISOString()
+        });
+        result = { success: true, override, totalOverrides: overrides.length };
+        console.log(`[Handler] Saved override for txId=${body.txId}, total: ${overrides.length}`);
+      }
     } else if (path.includes('/data')) {
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
       const locationMappings = await readJsonFromS3('config/location-mappings.json').catch(() => ({ mappings: [] }));
       const smartpo = await readJsonFromS3('processed/parsed-smartpo.json').catch(() => null);
+
+      // Backfill txId for transactions parsed before txId was added
+      if (ledgers?.ledgers) {
+        let backfilled = 0;
+        for (const ledger of ledgers.ledgers) {
+          for (const tx of ledger.transactions || []) {
+            if (!tx.txId) {
+              tx.txId = generateHash({
+                vendor: tx.vendor || '',
+                amount: tx.amount || 0,
+                description: tx.description || '',
+                episode: tx.episode || ledger.episode || '',
+                glCode: tx.glCode || tx.account || '',
+                transNumber: tx.transNumber || '',
+                transType: tx.transType || ''
+              });
+              backfilled++;
+            }
+          }
+        }
+        if (backfilled > 0) {
+          console.log(`[Handler] Backfilled txId for ${backfilled} transactions`);
+        }
+      }
 
       // Always fetch fresh budgets from Glide (never stale S3 cache)
       let budgets = null;
@@ -894,6 +978,36 @@ export async function handler(event, context) {
           ledgers.ledgers = Object.values(latestLedgers);
           if (beforeCount !== ledgers.ledgers.length) {
             console.log(`[Handler] Deduplicated ledgers: ${beforeCount} -> ${ledgers.ledgers.length}`);
+          }
+        }
+
+        // Apply transaction overrides BEFORE comparison
+        const txOverrides = await readJsonFromS3('config/transaction-overrides.json')
+          .catch(() => ({ overrides: [] }));
+        const overrideMap = new Map((txOverrides.overrides || []).map(o => [o.txId, o]));
+        if (overrideMap.size > 0) {
+          let appliedCount = 0;
+          for (const ledger of ledgers.ledgers || []) {
+            for (const tx of ledger.transactions || []) {
+              const override = overrideMap.get(tx.txId);
+              if (override) {
+                tx._override = {
+                  originalEpisode: tx.episode,
+                  originalLocation: tx.location || tx.matchedLocation,
+                  originalCategory: tx.category
+                };
+                if (override.newEpisode) tx.episode = override.newEpisode;
+                if (override.newLocation) {
+                  tx.matchedLocation = override.newLocation;
+                  tx.location = override.newLocation;
+                }
+                if (override.newCategory) tx.category = override.newCategory;
+                appliedCount++;
+              }
+            }
+          }
+          if (appliedCount > 0) {
+            console.log(`[Handler] Applied ${appliedCount} transaction overrides`);
           }
         }
 

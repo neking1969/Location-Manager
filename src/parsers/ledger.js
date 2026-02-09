@@ -588,6 +588,17 @@ export function parseExcelLedger(buffer, filename) {
           amount: transaction.amount
         });
 
+        // Stable transaction ID for override tracking (more fields = fewer collisions)
+        transaction.txId = generateHash({
+          vendor: transaction.vendor,
+          amount: transaction.amount,
+          description: transaction.description,
+          episode,
+          glCode,
+          transNumber: transaction.transNumber,
+          transType
+        });
+
         transactions.push(transaction);
       }
     }

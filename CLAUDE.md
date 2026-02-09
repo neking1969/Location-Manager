@@ -114,6 +114,13 @@ bash lambda/deploy.sh
 
 ## Recent Changes (2026-02-08)
 
+15. ✅ **Outline Button Style (All Pages)** - Replaced all solid-fill buttons with outline + semi-transparent fill to match dashboard card style. Pattern: `bg-{color}/20 text-{color}-400 border border-{color}/30`. Active toggles/pills use `ring-1 ring-{color}/50`. Changed ~30 buttons across 9 files: LocationFilters, LocationsClient, SyncButton, RefreshButton, episodes/[id], upload, review-pos, ledgers, mapping. Commit `b033f6d`.
+
+11. ✅ **Active Tab Highlighting** - Nav tabs now highlight white when on the current page. Fixed "Dashboard" tab which never highlighted because `href="/"` didn't match the `/summary` pathname after redirect. Changed all nav links from `/` to `/summary`. Simplified NavLink `isActive` logic.
+12. ✅ **Over-Budget Count Fix** - Summary page Quick Stats "Over Budget" card showed 5 instead of 11. The `problemLocations` array was `.slice(0, 5)` for display, but the count card was reading from the truncated array. Now uses full `allOverBudget.length`.
+13. ✅ **Topsheet Category Fix** - Topsheet was using simplified `getBudgetCategory()` which missed Equipment, Addl. Site Fees, and Site Personnel for GL 6342. Now uses Lambda's pre-computed `tx.category` (same fix as Budget page). Also updated CATEGORY_COLUMNS to match standard names.
+14. ✅ **Live Data Validation** - All pages validated against live API data. Budget, actual, variance match across Lambda, Dashboard API, and browser display for all 50 locations, 5 episodes, and 10 categories.
+
 8. ✅ **Category Order Matches Glide** - Dashboard categories now display in Glide's budget view order instead of alphabetical: Loc Fees, Addl. Site Fees, Site Personnel, Permits, Addl. Labor, Equipment, Parking, Fire, Police, Security. Changed in `route.ts` (CATEGORY_ORDER) and `handler.js` (ALL_CATEGORIES).
 9. ✅ **Pre-computed Category Matching** - Dashboard now uses Lambda's pre-computed `tx.category` field instead of recalculating from GL codes. Fixes Equipment, Addl. Site Fees, and Site Personnel showing $0 actual (the dashboard's `getCategoryFromTransaction()` was missing GL 6342 subcategory handlers).
 10. ℹ️ **Addl. Labor Stays $0** - Investigated and confirmed: Addl. Labor has no GL code. Budget items are payroll positions (Layout Tech, A/C Operator, KALM, ALM, Bathroom Attendant, Snake Wrangler) that show as GL 6342 + PR in ledgers, same as Site Personnel. Splitting by name not worth complexity. Total budget: $292K.
@@ -181,6 +188,7 @@ bash lambda/deploy.sh
 15. **Use Lambda's pre-computed category** - Dashboard should use `tx.category` from Lambda, not recalculate. The Lambda's `categorizeTransaction()` has full GL 6342 subcategory logic; the dashboard's version was incomplete.
 16. **Addl. Labor has no GL code** - Budget items are payroll positions (Layout Tech, A/C Operator, KALM, ALM, etc.) that share GL 6342 + PR with Site Personnel. No way to distinguish without name-matching. $292K budget, $0 actual is expected.
 17. **Glide category display order** - Loc Fees, Addl. Site Fees, Site Personnel, Permits, Addl. Labor, Equipment, Parking, Fire, Police, Security. Defined as `CATEGORY_ORDER` in route.ts.
+18. **Button style convention** - NEVER use solid fills (`bg-color text-white`). All buttons use outline + semi-transparent: action buttons `bg-{color}/20 text-{color}-400 border border-{color}/30`, active toggles/pills `ring-1 ring-{color}/50`, neutral buttons `bg-[var(--card)] text-[var(--muted)] border border-[var(--card-border)]`.
 
 ---
 
