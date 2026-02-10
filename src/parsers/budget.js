@@ -91,6 +91,7 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
 
   const locEpMap = new Map();
   const epCatMap = new Map();
+  const catLocEpMap = new Map();
   let skippedCount = 0;
   let withDirectEpisode = 0;
   let withBudgetEpisode = 0;
@@ -156,10 +157,17 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
       epCatMap.set(epCatKey, { episode: episodeName, category, totalBudget: 0 });
     }
     epCatMap.get(epCatKey).totalBudget += amount;
+
+    const catLocEpKey = `${category}|${locationName}|${episodeName}`;
+    if (!catLocEpMap.has(catLocEpKey)) {
+      catLocEpMap.set(catLocEpKey, { category, location: locationName, episode: episodeName, totalBudget: 0 });
+    }
+    catLocEpMap.get(catLocEpKey).totalBudget += amount;
   }
 
   const byLocationEpisode = Array.from(locEpMap.values());
   const byEpisodeCategory = Array.from(epCatMap.values());
+  const byCategoryLocationEpisode = Array.from(catLocEpMap.values());
 
   // Use totalFromMake as authoritative budget when available (from Glide spreadsheet)
   // Line item calculations can diverge from the original budget spreadsheet totals
@@ -199,6 +207,7 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
   return {
     byLocationEpisode,
     byEpisodeCategory,
+    byCategoryLocationEpisode,
     episodeTotals,
     metadata: {
       locationsBudgetCount: (locationsBudgets || []).length,

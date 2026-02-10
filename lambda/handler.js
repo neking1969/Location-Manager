@@ -1014,6 +1014,7 @@ export async function handler(event, context) {
         result = generateLocationComparison(budgets, ledgers, locationMappings, smartpo);
         result.episodeTotals = budgets.episodeTotals || {};
         result.byEpisodeCategory = budgets.byEpisodeCategory || [];
+        result.byCategoryLocationEpisode = budgets.byCategoryLocationEpisode || [];
 
         // Distribute "all" budget across episodes with GL actuals
         // Glide budgets are per-location (not per-episode), so most items have episode="all"
@@ -1067,6 +1068,37 @@ export async function handler(event, context) {
               }
             }
             result.byEpisodeCategory = nonAllItems;
+          }
+        }
+
+        // Same for byCategoryLocationEpisode
+        if (result.byCategoryLocationEpisode?.length > 0) {
+          const activeEps = new Set();
+          for (const ledger of ledgers.ledgers || []) {
+            if (ledger.episode && ledger.episode !== 'unknown') {
+              activeEps.add(ledger.episode);
+            }
+          }
+
+          if (activeEps.size > 0) {
+            const allItems = result.byCategoryLocationEpisode.filter(i => i.episode === 'all');
+            const nonAllItems = result.byCategoryLocationEpisode.filter(i => i.episode !== 'all');
+
+            for (const item of allItems) {
+              const perEp = item.totalBudget / activeEps.size;
+              for (const ep of activeEps) {
+                const existing = nonAllItems.find(
+                  i => i.episode === ep && i.category === item.category && i.location === item.location
+                );
+                if (existing) {
+                  existing.totalBudget += perEp;
+                } else {
+                  nonAllItems.push({ category: item.category, location: item.location, episode: ep, totalBudget: perEp });
+                }
+              }
+            }
+            result.byCategoryLocationEpisode = nonAllItems;
+            console.log(`[Handler] Distributed ${allItems.length} "all" byCategoryLocationEpisode items across ${activeEps.size} episodes`);
           }
         }
       }
