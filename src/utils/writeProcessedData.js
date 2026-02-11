@@ -1,16 +1,66 @@
 import { writeJsonToS3, readJsonFromS3, uploadFileToS3 } from './s3Utils.js';
 
+/**
+ * Merge ledgers by deduplicating transactions at the txId level
+ * instead of overwriting entire ledgers by episode-account key.
+ *
+ * This ensures that when the same episode-account combo is uploaded twice,
+ * old transactions are preserved and only new unique transactions are added.
+ *
+ * @param {Array} existingLedgers - Ledgers currently in S3
+ * @param {Array} newLedgers - Newly uploaded ledgers
+ * @returns {Array} Merged ledgers with deduplicated transactions
+ */
 function mergeLedgers(existingLedgers, newLedgers) {
-  const merged = new Map();
+  // Step 1: Flatten all transactions from all ledgers (existing + new)
+  const allTransactions = new Map(); // Map<txId, transaction>
+
+  // Add existing transactions
   for (const ledger of existingLedgers) {
-    const key = `${ledger.episode}-${ledger.account}`;
-    merged.set(key, ledger);
+    for (const tx of ledger.transactions || []) {
+      if (tx.txId) {
+        allTransactions.set(tx.txId, tx);
+      }
+    }
   }
+
+  // Add new transactions (deduplicates automatically via Map)
   for (const ledger of newLedgers) {
-    const key = `${ledger.episode}-${ledger.account}`;
-    merged.set(key, ledger);
+    for (const tx of ledger.transactions || []) {
+      if (tx.txId) {
+        allTransactions.set(tx.txId, tx);
+      }
+    }
   }
-  return Array.from(merged.values());
+
+  // Step 2: Rebuild ledger structure by grouping transactions by episode-account
+  const ledgerMap = new Map(); // Map<"episode-account", ledger>
+
+  for (const tx of allTransactions.values()) {
+    const episode = tx.episode || 'unknown';
+    const account = tx.glAccount?.substring(0, 4) || 'unknown';
+    const key = `${episode}-${account}`;
+
+    if (!ledgerMap.has(key)) {
+      // Create new ledger structure
+      ledgerMap.set(key, {
+        episode,
+        account,
+        transactions: [],
+        transactionCount: 0
+      });
+    }
+
+    const ledger = ledgerMap.get(key);
+    ledger.transactions.push(tx);
+  }
+
+  // Step 3: Update transaction counts for each ledger
+  for (const ledger of ledgerMap.values()) {
+    ledger.transactionCount = ledger.transactions.length;
+  }
+
+  return Array.from(ledgerMap.values());
 }
 
 /**
@@ -67,20 +117,39 @@ export async function writeProcessedLedger(results, sessionInfo, originalFiles =
       console.log(`[Write] Archived SmartPO to S3: ${archiveKey}`);
     }
 
-    // 3. Read existing ledgers from S3, merge with new, then write
+    // 3. Read existing ledgers from S3, archive before merging, then merge
     const parsedLedgersKey = 'processed/parsed-ledgers-detailed.json';
     let existingLedgers = [];
+    let existingData = null;
     try {
-      const existing = await readJsonFromS3(parsedLedgersKey);
-      existingLedgers = existing.ledgers || [];
+      existingData = await readJsonFromS3(parsedLedgersKey);
+      existingLedgers = existingData.ledgers || [];
       console.log(`[Write] Read ${existingLedgers.length} existing ledgers from S3`);
+
+      // Archive existing transaction data BEFORE merging (safety backup)
+      if (existingLedgers.length > 0) {
+        const archiveKey = `archives/transactions/${dateStr}-${sessionSlug}-pre-merge.json`;
+        await writeJsonToS3(archiveKey, existingData);
+        writtenPaths.archivedTransactions = { key: archiveKey };
+        console.log(`[Write] Archived ${existingLedgers.length} existing ledgers before merge: ${archiveKey}`);
+      }
     } catch (e) {
       console.log(`[Write] No existing ledgers in S3 (first sync or reset)`);
     }
 
     const newLedgers = results.ledgers?.ledgers || [];
     const mergedLedgers = mergeLedgers(existingLedgers, newLedgers);
-    console.log(`[Write] Merged: ${existingLedgers.length} existing + ${newLedgers.length} new = ${mergedLedgers.length} total ledgers`);
+
+    // Calculate deduplication stats
+    const existingTxCount = existingLedgers.reduce((sum, l) => sum + (l.transactionCount || 0), 0);
+    const newTxCount = newLedgers.reduce((sum, l) => sum + (l.transactionCount || 0), 0);
+    const mergedTxCount = mergedLedgers.reduce((sum, l) => sum + (l.transactionCount || 0), 0);
+    const duplicatesRemoved = (existingTxCount + newTxCount) - mergedTxCount;
+
+    console.log(`[Write] Merged ledgers: ${existingTxCount} existing + ${newTxCount} new = ${mergedTxCount} unique transactions`);
+    if (duplicatesRemoved > 0) {
+      console.log(`[Write] Deduplicated ${duplicatesRemoved} duplicate transactions`);
+    }
 
     const detailedData = {
       totalFiles: mergedLedgers.length,

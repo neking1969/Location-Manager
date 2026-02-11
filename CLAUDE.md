@@ -112,6 +112,16 @@ bash lambda/deploy.sh
 
 ---
 
+## Recent Changes (2026-02-11)
+
+18. ✅ **Transaction-Level Deduplication System** - FIXED critical bug in `mergeLedgers()` function that was overwriting entire ledgers instead of deduplicating individual transactions. Rewrote to flatten all transactions, deduplicate by `txId` (hash of vendor, amount, description, episode, glCode, transNumber, transType), and rebuild ledger structure. Added automatic archival of existing transaction data to `archives/transactions/{date}-{session}-pre-merge.json` before any merge operation. Logs now show deduplication stats (e.g., "Deduplicated 42 duplicate transactions"). Next ledger upload will be foolproof - zero data loss guaranteed. File: `src/utils/writeProcessedData.js:3-64,120-152`.
+
+16. ✅ **Drag-and-Drop Transaction Reassignment** - Implemented @dnd-kit/core drag-and-drop for moving budget line items between episodes and locations. Features: (1) Centered floating overlay with backdrop blur when dragging (2) Episode cards color-coded green (under budget) or red (over budget) (3) Location cards populated from `/api/locations-budget` using `glideLocation` field (4) ReassignmentModal for confirming changes with reason field (5) POST to `/api/overrides` to save reassignments (6) DELETE endpoint for undo functionality. Key files: `BudgetDndProvider.tsx`, `EpisodeCard.tsx`, `DraggableTransaction.tsx`, `ReassignmentModal.tsx`. Pattern: `fixed inset-0` + `flex items-center justify-center` for centered overlay, NOT fixed panels at screen edges.
+
+17. ✅ **Deduplication Architecture Issue** - RESOLVED. Was: `mergeLedgers()` merged by `${episode}-${account}` key, overwriting entire ledgers. Now: transaction-level dedup by `txId` with automatic archival before merge.
+
+---
+
 ## Recent Changes (2026-02-08)
 
 15. ✅ **Outline Button Style (All Pages)** - Replaced all solid-fill buttons with outline + semi-transparent fill to match dashboard card style. Pattern: `bg-{color}/20 text-{color}-400 border border-{color}/30`. Active toggles/pills use `ring-1 ring-{color}/50`. Changed ~30 buttons across 9 files: LocationFilters, LocationsClient, SyncButton, RefreshButton, episodes/[id], upload, review-pos, ledgers, mapping. Commit `b033f6d`.
