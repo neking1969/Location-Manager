@@ -881,6 +881,21 @@ export async function handler(event, context) {
       result.filesProcessed = processedFiles;
       result.filesDuplicated = skippedDuplicates;
       result.syncSource = syncSource;
+
+      // Write latest sync summary for dashboard
+      if (result.success && result.ledgers) {
+        const syncSummary = {
+          timestamp: new Date().toISOString(),
+          syncSource,
+          sessionId: body.syncSessionId || Date.now().toString(),
+          transactions: result.ledgers.totalLineItems || 0,
+          grandTotal: result.ledgers.grandTotal || 0,
+          filesProcessed: processedFiles.filter(f => f.status === 'processed'),
+          filesDuplicated: skippedDuplicates
+        };
+        await writeJsonToS3('processed/latest-sync-summary.json', syncSummary);
+        console.log('[Handler] Wrote latest sync summary');
+      }
     } else if (path.includes('/approve')) {
       result = await handleApproval(body);
     } else if (path.includes('/mappings')) {
