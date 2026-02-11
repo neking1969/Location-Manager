@@ -6,6 +6,7 @@ import { parseFilename, generateHash } from '../src/utils/fileUtils.js';
 import { categorizeTransaction } from '../src/parsers/ledger.js';
 import { createGlideClient } from '../src/glide/client.js';
 import { transformBudgetData } from '../src/parsers/budget.js';
+import { generateFileHash, checkFileProcessed, markFileProcessed, classifyFileType } from '../src/utils/fileDeduplication.js';
 
 const ALL_CATEGORIES = [
   'Loc Fees', 'Addl. Site Fees', 'Site Personnel', 'Permits',
@@ -737,6 +738,15 @@ export async function handler(event, context) {
     let result;
     if (path.includes('/sync')) {
       const syncInput = {};
+      const syncSource = body.syncSource || 'manual'; // 'manual', 'google-drive-auto', 'glide-webhook'
+      const explicitFileType = body.fileType; // 'LEDGER', 'SMARTPO', 'INVOICE', 'CHECK_REQUEST'
+      const filePath = body.filePath || ''; // Google Drive folder path for classification
+
+      console.log(`[Handler] Sync source: ${syncSource}, Explicit fileType: ${explicitFileType || 'auto-detect'}`);
+
+      // Track files processed in this sync
+      const processedFiles = [];
+      const skippedDuplicates = [];
 
       // Support multiple ledger files (array, comma-separated string, or single URL)
       let ledgerUrls = body.ledgerFileUrls && body.ledgerFileUrls.length > 0
@@ -744,19 +754,67 @@ export async function handler(event, context) {
         : body.ledgerFileUrl
           ? body.ledgerFileUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'))
           : [];
+
+      // Single file mode (Google Drive auto-sync)
+      if (body.fileUrl && !ledgerUrls.length) {
+        ledgerUrls = [body.fileUrl];
+      }
+
       if (ledgerUrls.length > 0) {
-        console.log(`[Handler] Downloading ${ledgerUrls.length} ledger file(s)...`);
+        console.log(`[Handler] Downloading ${ledgerUrls.length} file(s)...`);
         syncInput.ledgerFiles = [];
         for (const url of ledgerUrls) {
           try {
-            const ledgerFile = await downloadFile(url);
-            syncInput.ledgerFiles.push(ledgerFile);
-            console.log(`[Handler] Downloaded: ${ledgerFile.filename} (${ledgerFile.buffer.length} bytes)`);
+            const file = await downloadFile(url);
+            const fileHash = generateFileHash(file.buffer);
+
+            // Check for duplicates
+            const dedupCheck = await checkFileProcessed(fileHash, file.filename);
+            if (dedupCheck.isDuplicate && syncSource === 'google-drive-auto') {
+              console.log(`[Handler] SKIPPED duplicate file: ${file.filename} (previously processed ${dedupCheck.previousSync.processedAt})`);
+              skippedDuplicates.push({
+                fileName: file.filename,
+                previousSync: dedupCheck.previousSync
+              });
+              continue;
+            }
+
+            // Classify file type
+            const detectedType = explicitFileType || classifyFileType(file.filename, filePath);
+            console.log(`[Handler] Downloaded: ${file.filename} (${file.buffer.length} bytes) - Type: ${detectedType}`);
+
+            // Route based on file type
+            if (detectedType === 'LEDGER') {
+              syncInput.ledgerFiles.push(file);
+            } else if (detectedType === 'SMARTPO') {
+              syncInput.smartpoFile = file;
+            } else if (detectedType === 'INVOICE' || detectedType === 'CHECK_REQUEST') {
+              // Log for future processing - not yet implemented
+              console.log(`[Handler] ${detectedType} file received but not yet processed: ${file.filename}`);
+              processedFiles.push({
+                fileName: file.filename,
+                fileType: detectedType,
+                fileHash,
+                status: 'logged-only'
+              });
+            } else {
+              // Unknown type - treat as ledger for backward compatibility
+              console.warn(`[Handler] Unknown file type for ${file.filename}, treating as LEDGER`);
+              syncInput.ledgerFiles.push(file);
+            }
+
+            processedFiles.push({
+              fileName: file.filename,
+              fileType: detectedType,
+              fileHash,
+              status: 'processed'
+            });
+
           } catch (e) {
-            console.warn(`[Handler] Failed to download ledger: ${e.message}`);
+            console.warn(`[Handler] Failed to download file: ${e.message}`);
           }
         }
-        console.log(`[Handler] Downloaded ${syncInput.ledgerFiles.length}/${ledgerUrls.length} ledger files`);
+        console.log(`[Handler] Processed ${processedFiles.length} files, skipped ${skippedDuplicates.length} duplicates`);
       }
 
       // Support multiple SmartPO files (array, comma-separated string, or single URL)
@@ -800,6 +858,17 @@ export async function handler(event, context) {
           smartpoFilename: syncInput.smartpoFile?.filename
         });
         console.log('[Handler] Persisted enriched ledger data to S3');
+
+        // Mark files as processed in registry (deduplication)
+        for (const fileInfo of processedFiles) {
+          if (fileInfo.status === 'processed') {
+            await markFileProcessed(fileInfo.fileHash, fileInfo.fileName, {
+              syncSource,
+              fileType: fileInfo.fileType,
+              syncSessionId: body.syncSessionId || Date.now().toString()
+            });
+          }
+        }
       }
 
       // Always write budget data to S3 when available (even without ledger upload)
@@ -807,6 +876,11 @@ export async function handler(event, context) {
         await writeJsonToS3('static/parsed-budgets.json', result.budgetData);
         console.log('[Handler] Wrote budget data to S3');
       }
+
+      // Add file processing metadata to result
+      result.filesProcessed = processedFiles;
+      result.filesDuplicated = skippedDuplicates;
+      result.syncSource = syncSource;
     } else if (path.includes('/approve')) {
       result = await handleApproval(body);
     } else if (path.includes('/mappings')) {
