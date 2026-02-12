@@ -2,8 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const BUCKET = 'enneking-wealth-app';
-const DATA_PREFIX = 'data/';
+const BUCKET = 'enneking-wealth-data';
+const DATA_PREFIX = '';
 const IS_LAMBDA = !!process.env.LAMBDA_TASK_ROOT;
 
 let s3Client = null;

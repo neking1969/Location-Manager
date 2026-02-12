@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import * as api from '../services/api';
 
 export default function LinkAccount({ onSuccess }) {
-  const [mode, setMode] = useState(null); // 'screenshot' | 'csv' | 'manual'
+  const [mode, setMode] = useState(null);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -11,26 +11,22 @@ export default function LinkAccount({ onSuccess }) {
   const fileRef = useRef();
   const photoRef = useRef();
 
-  // Manual add
   const [manualName, setManualName] = useState('');
   const [manualInst, setManualInst] = useState('Fidelity');
   const [manualTicker, setManualTicker] = useState('');
   const [manualShares, setManualShares] = useState('');
   const [manualCost, setManualCost] = useState('');
 
-  // Screenshot preview
   const [preview, setPreview] = useState(null);
-  const [parsedPositions, setParsedPositions] = useState(null);
 
   const resetState = () => {
     setMode(null);
     setError(null);
+    setSuccess(null);
     setPreview(null);
-    setParsedPositions(null);
     setImporting(false);
   };
 
-  // Screenshot handling
   const handleScreenshot = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -38,10 +34,8 @@ export default function LinkAccount({ onSuccess }) {
     setImporting(true);
     setError(null);
     setSuccess(null);
-    setParsedPositions(null);
 
     try {
-      // Convert to base64
       const reader = new FileReader();
       const base64 = await new Promise((resolve, reject) => {
         reader.onload = () => resolve(reader.result);
@@ -50,14 +44,10 @@ export default function LinkAccount({ onSuccess }) {
       });
 
       setPreview(base64);
-
-      // Send to API for Claude vision parsing
       const result = await api.importScreenshot(base64);
-
-      setSuccess(`Found ${result.positionsImported} positions from ${result.institution || 'screenshot'}`);
-      setParsedPositions(result.positions);
-      setMode(null);
+      setSuccess(`Imported ${result.positionsImported} positions from ${result.institution || 'screenshot'}`);
       setPreview(null);
+      // Stay in screenshot mode so user can scan another account
       if (onSuccess) onSuccess();
     } catch (err) {
       setError(err.message);
@@ -67,7 +57,6 @@ export default function LinkAccount({ onSuccess }) {
     }
   };
 
-  // CSV handling
   const handleFileImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,7 +86,6 @@ export default function LinkAccount({ onSuccess }) {
     }
   };
 
-  // Manual add
   const handleManualAdd = async () => {
     if (!manualTicker || !manualShares) return;
     setError(null);
@@ -129,16 +117,14 @@ export default function LinkAccount({ onSuccess }) {
 
   return (
     <div>
-      {success && (
+      {success && mode !== 'screenshot' && (
         <div style={{ color: 'var(--accent-green)', fontSize: 13, textAlign: 'center', marginBottom: 8, padding: 10, background: 'rgba(34,197,94,0.1)', borderRadius: 8 }}>
           {success}
         </div>
       )}
 
-      {/* Main buttons */}
       {!mode && (
         <div>
-          {/* Screenshot button - prominent */}
           <button
             className="btn-primary"
             onClick={() => { setMode('screenshot'); setError(null); setSuccess(null); }}
@@ -157,16 +143,15 @@ export default function LinkAccount({ onSuccess }) {
         </div>
       )}
 
-      {/* Screenshot Import */}
       {mode === 'screenshot' && (
         <div style={{ background: 'var(--bg-primary)', borderRadius: 10, padding: 14, marginTop: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>Scan Portfolio Screenshot</span>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>Scan Account Screenshot</span>
             <button onClick={resetState} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>X</button>
           </div>
 
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
-            Take a screenshot of your positions in Fidelity, Merrill Lynch, or any brokerage app. AI will extract all holdings automatically.
+            Screenshot your positions from Fidelity, Merrill Lynch, Robinhood, or any brokerage. Re-scanning the same institution updates it automatically.
           </div>
 
           {preview && (
@@ -191,24 +176,28 @@ export default function LinkAccount({ onSuccess }) {
                 onChange={handleScreenshot}
                 style={{ display: 'none' }}
               />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn-primary"
-                  onClick={() => photoRef.current?.click()}
-                  style={{ flex: 1 }}
-                >
-                  Choose Photo
-                </button>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
+              <button
+                className="btn-primary"
+                onClick={() => photoRef.current?.click()}
+                style={{ width: '100%', marginBottom: 8 }}
+              >
+                Choose Photo
+              </button>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
                 ~$0.01 per scan via Claude AI
               </div>
             </>
           )}
+
+          {success && (
+            <div style={{ marginTop: 12, padding: 10, background: 'rgba(34,197,94,0.1)', borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ color: 'var(--accent-green)', fontSize: 13, marginBottom: 4 }}>{success}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Scan another account or tap X to close</div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* CSV Import */}
       {mode === 'csv' && (
         <div style={{ background: 'var(--bg-primary)', borderRadius: 10, padding: 14, marginTop: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -258,7 +247,6 @@ export default function LinkAccount({ onSuccess }) {
         </div>
       )}
 
-      {/* Manual Add */}
       {mode === 'manual' && (
         <div style={{ background: 'var(--bg-primary)', borderRadius: 10, padding: 14, marginTop: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -271,6 +259,7 @@ export default function LinkAccount({ onSuccess }) {
             <select value={manualInst} onChange={e => setManualInst(e.target.value)}>
               <option>Fidelity</option>
               <option>Merrill Lynch</option>
+              <option>Robinhood</option>
               <option>Other</option>
             </select>
           </div>

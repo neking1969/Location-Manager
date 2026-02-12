@@ -453,14 +453,31 @@ Rules:
     }));
 
     const data = await loadHoldings();
-    const accountId = `screenshot-${Date.now()}`;
-    data.accounts.push({
+    const detectedInst = parsed.institution || institution || 'Unknown';
+    const acctName = accountName || detectedInst;
+
+    // Replace existing account from same institution (re-scan = update)
+    const existingIdx = data.accounts.findIndex(a =>
+      a.institution && a.institution.toLowerCase() === detectedInst.toLowerCase()
+    );
+
+    const accountId = existingIdx >= 0
+      ? data.accounts[existingIdx].id
+      : `screenshot-${Date.now()}`;
+
+    const account = {
       id: accountId,
-      name: accountName || parsed.institution || institution || 'Imported',
-      institution: parsed.institution || institution || 'Unknown',
+      name: acctName,
+      institution: detectedInst,
       positions,
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    if (existingIdx >= 0) {
+      data.accounts[existingIdx] = account;
+    } else {
+      data.accounts.push(account);
+    }
     await saveHoldings(data);
 
     res.json({
