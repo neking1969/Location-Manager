@@ -1,0 +1,12 @@
+node_modules
+client/node_modules
+server/node_modules
+client/build
+.git
+.gitignore
+*.md
+!README.md
+.env
+.env.*
+server/uploads/*
+!server/uploads/.gitkeep

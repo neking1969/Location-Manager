@@ -9,6 +9,8 @@ const costRoutes = require('./routes/costs');
 const uploadRoutes = require('./routes/upload');
 const reportsRoutes = require('./routes/reports');
 const glideRoutes = require('./routes/glide');
+const budgetAppRoutes = require('./routes/budgetApp');
+const { initBudgetDatabase } = require('./budgetDatabase');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -18,8 +20,9 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Initialize database
+// Initialize databases
 initializeDatabase();
+initBudgetDatabase();
 
 // Routes
 app.use('/api/projects', projectRoutes);
@@ -29,6 +32,7 @@ app.use('/api/costs', costRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/glide', glideRoutes);
+app.use('/api/budget-app', budgetAppRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
