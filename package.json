@@ -10,7 +10,12 @@
     "test": "node src/index.js test",
     "deploy": "amplify push"
   },
-  "keywords": ["glide", "location", "budget", "tv-production"],
+  "keywords": [
+    "glide",
+    "location",
+    "budget",
+    "tv-production"
+  ],
   "author": "Shards Production",
   "license": "PRIVATE",
   "dependencies": {

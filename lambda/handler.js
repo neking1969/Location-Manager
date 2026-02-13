@@ -326,12 +326,9 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   console.log(`[Handler] Loaded ${aliasLookup.size} aliases, ${serviceChargePatterns.length} service patterns, ${pendingLocations.size} pending locations`);
   console.log(`[Handler] SmartPO data: ${smartpo?.totalPOs || 0} POs, $${(smartpo?.totalAmount || 0).toFixed(2)} total`);
 
-  // Check if location is a service charge
-  function isServiceCharge(name) {
-    if (!name) return false;
-    const normalized = name.toLowerCase().trim();
-    return serviceChargePatterns.some(p => normalized.includes(p) || p.includes(normalized));
-  }
+  // isServiceCharge removed — was incorrectly filtering $930K+ of valid GL transactions
+  // including false positives where "parking" pattern matched real locations like
+  // "Buckley Courtyard / Parking Lot" and "3rd Floor Parking Garage"
   // Build budget lookup by location name (case-insensitive)
   const budgetByLocation = new Map();
   for (const item of budgets.byLocationEpisode || []) {
@@ -362,8 +359,6 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   // Track service charges separately; collect no-location transactions for episode totals
   const actualsByLocation = new Map();
   const noLocationTransactions = []; // Transactions with no location (e.g. EP payroll)
-  let serviceChargeTotal = 0;
-  let serviceChargeCount = 0;
   let descriptionOverrides = 0;
 
   // Build date-to-location map from transactions that have locations
@@ -470,12 +465,11 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
         continue;
       }
 
-      // Check if this is a service charge (skip from location matching)
-      if (isServiceCharge(locName)) {
-        serviceChargeTotal += Math.abs(tx.amount || 0);
-        serviceChargeCount++;
-        continue;
-      }
+      // Service charges are NOT filtered — they're real GL expenditures
+      // that belong in episode actuals. Transactions with generic service names
+      // (GUARDS, PERMITS, etc.) will land in unmappedLocations via normal matching.
+      // Previously this filter dropped 126+ txns worth $930K+ including false positives
+      // like "Buckley Courtyard / Parking Lot" matching the "parking" pattern.
 
       const key = locName.toLowerCase().trim();
       if (!actualsByLocation.has(key)) {
@@ -503,7 +497,7 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       });
     }
   }
-  console.log(`[Handler] Description keyword overrides: ${descriptionOverrides}, service charges skipped: ${serviceChargeCount}`);
+  console.log(`[Handler] Description keyword overrides: ${descriptionOverrides}`);
 
   // Classify into budgeted vs unmapped
   // Aggregate actuals by matched budget location

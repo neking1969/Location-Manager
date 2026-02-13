@@ -588,7 +588,9 @@ export function parseExcelLedger(buffer, filename) {
           amount: transaction.amount
         });
 
-        // Stable transaction ID for override tracking (more fields = fewer collisions)
+        // Stable transaction ID for override tracking and deduplication
+        // Includes row index + filename to avoid false collisions between
+        // identical-looking rows (e.g., 8 monthly GLOBUG rentals at $2,400 each)
         transaction.txId = generateHash({
           vendor: transaction.vendor,
           amount: transaction.amount,
@@ -596,7 +598,9 @@ export function parseExcelLedger(buffer, filename) {
           episode,
           glCode,
           transNumber: transaction.transNumber,
-          transType
+          transType,
+          rowIndex: i,
+          filename: filename || ''
         });
 
         transactions.push(transaction);
