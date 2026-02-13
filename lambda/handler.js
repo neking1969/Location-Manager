@@ -987,6 +987,14 @@ export async function handler(event, context) {
         result = { success: true, override, totalOverrides: overrides.length };
         console.log(`[Handler] Saved override for txId=${body.txId}, total: ${overrides.length}`);
       }
+    } else if (path.includes('/ledgers') && !path.includes('/data')) {
+      // Lightweight endpoint: return raw ledger data from S3
+      const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
+      if (!ledgers) {
+        result = { error: 'No ledger data found', ledgers: [] };
+      } else {
+        result = ledgers;
+      }
     } else if (path.includes('/data')) {
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
       const locationMappings = await readJsonFromS3('config/location-mappings.json').catch(() => ({ mappings: [] }));
