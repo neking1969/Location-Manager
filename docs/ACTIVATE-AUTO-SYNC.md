@@ -1,131 +1,120 @@
-# Activate Google Drive Auto-Sync
+# Google Drive Auto-Sync — ACTIVE
 
-## What This Does
-When activated, any file dropped into the Google Drive budget tracking folders will automatically be processed and appear on the dashboard within 2-3 minutes.
+## Status: LIVE
 
-## Status
-- Lambda: Ready (deployed with /sync endpoint and file type detection)
-- Blueprint: Ready (at `blueprints/google-drive-auto-sync-scenario.json`)
-- Make.com: Needs manual setup (Google Drive connection required)
+The auto-sync system is **built, deployed, and active**. When Kirsten drops files into the Google Drive folders, they are automatically processed within 15 minutes.
 
----
-
-## Setup Steps (Jeffrey does this once)
-
-### Step 1: Connect Google Drive in Make.com
-
-The `modernlocations@gmail.com` Google account is not yet connected in Make.com.
-
-1. Go to **Make.com** > **Connections**: https://us1.make.com/300311/connections
-2. Click **Add Connection**
-3. Choose **Google**
-4. Sign in with **modernlocations@gmail.com**
-5. Grant permissions for Google Drive access
-6. Name it: `Modern Locations Google Drive`
-
-### Step 2: Create the Auto-Sync Scenario
-
-1. Go to **Make.com** > **Scenarios**: https://us1.make.com/300311/scenarios
-2. Click **Create a new scenario**
-3. Name it: `Shards: Google Drive Auto-Sync`
-
-### Step 3: Add Google Drive Trigger
-
-1. Click the **+** to add a module
-2. Search for **Google Drive**
-3. Choose **Watch Files in a Folder**
-4. Connection: Select the `Modern Locations Google Drive` connection
-5. Folder: Navigate to:
-   ```
-   My Drive > THE SHARDS - SEASON 1 > AA_FOR BUDGET TRACKING WEBSITE
-   ```
-6. Watch: **Files Created**
-7. Limit: **10**
-8. **Important**: Check "Watch Subfolders" so it catches files in /Ledgers/, /POs/, etc.
-
-### Step 4: Add Router Module
-
-1. After the Google Drive trigger, add a **Router**
-2. Create 4 routes:
-
-**Route 1 - Ledgers**
-- Filter: Filename matches `\d{3}\s+6304-6342` (regex)
-- OR: Folder path contains `Ledgers`
-
-**Route 2 - PO Log**
-- Filter: Filename starts with `PO-Log`
-- OR: Folder path contains `POs`
-
-**Route 3 - Invoices**
-- Filter: Folder path contains `Invoices`
-
-**Route 4 - Check Requests**
-- Filter: Folder path contains `Check Requests`
-
-### Step 5: Add HTTP Module to Each Route
-
-For each route, add an **HTTP > Make a request** module:
-
-- **URL**: `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync`
-- **Method**: POST
-- **Body type**: JSON
-- **Body**:
-  ```json
-  {
-    "fileUrl": "{{webContentLink from Google Drive trigger}}",
-    "fileName": "{{name from Google Drive trigger}}",
-    "filePath": "{{parents folder name}}",
-    "syncSource": "google-drive-auto",
-    "fileType": "LEDGER"
-  }
-  ```
-  (Change `fileType` for each route: LEDGER, SMARTPO, INVOICE, CHECK_REQUEST)
-
-### Step 6: Add Archive Step (Optional)
-
-After each HTTP module, add a **Google Drive > Move a File** module:
-- Move the processed file to the `/Archives/` folder
-- This prevents reprocessing and shows Kirsten which files have been handled
-
-### Step 7: Activate
-
-1. Click the **ON/OFF toggle** to activate the scenario
-2. Set scheduling to **Immediately** (triggers on file creation)
-3. Save
+| Component | Status | Details |
+|-----------|--------|---------|
+| Google Drive Folders | Created | `jeffrey@enneking.company` Drive |
+| Make.com Scenario | Active | ID: 4560202, polls every 15 min |
+| Lambda Multipart Support | Deployed | Accepts file uploads via multipart/form-data |
+| File Deduplication | Active | Same file won't be processed twice |
+| Archive After Processing | Active | Files move to `/Archives/` after sync |
 
 ---
 
-## Quick Alternative: Import Blueprint
+## How It Works
 
-Instead of building from scratch, you can import the pre-built blueprint:
+```
+Kirsten drops file into Google Drive folder
+  ↓ (within 15 minutes)
+Make.com watches folder for new files
+  ↓
+Google Drive "Get a File" downloads the file content
+  ↓
+Router classifies by filename or parent folder
+  ↓
+HTTP POST sends file as multipart/form-data to Lambda /sync
+  ↓
+Lambda parses Excel, writes to S3, updates dashboard
+  ↓
+File is moved to /Archives/ folder
+```
 
-1. Go to Make.com > Scenarios > Create New
-2. Click the **...** menu > **Import Blueprint**
-3. Upload: `/Volumes/Photos/Projects/Location-Manager/blueprints/google-drive-auto-sync-scenario.json`
-4. The blueprint will need you to:
-   - Select the Google Drive connection (Step 1 above must be done first)
-   - Set the folder ID for the watched folder
-5. Activate the scenario
+---
+
+## Google Drive Folder Structure
+
+**Account**: `jeffrey@enneking.company`
+**Path**: `Shared with me > AF > The Shards: Season 1 > AA_FOR BUDGET TRACKING WEBSITE`
+
+| Folder | Google Drive ID | File Types |
+|--------|----------------|------------|
+| `/Ledgers/` | `1ZWEcHz9oBYOm8gtXdxTJGFN8gzXWDgyn` | `{episode} 6304-6342 {date}.xlsx` |
+| `/POs/` | `128JxBOum6mCt_XexA5dSGUKRiyU8xvsg` | `PO-Log-{date}.xlsx` |
+| `/Check Requests/` | `1jwsFJu-QsyVVbv52k25klMZ5kVjALCHu` | Check request files |
+| `/Invoices/` | `1barija6FSQ2POU4Mt9bhn3osFvZ6vdRY` | Invoice files |
+| `/Archives/` | `1uHCPpgl7XG9_OZox60r6lhJbaw1x7Xg1` | Processed files (auto-moved) |
+
+**Parent folder**: `AA_FOR BUDGET TRACKING WEBSITE` = `1ccQn099wEk5V2w6WmgtExw66azkgQu4M`
+
+---
+
+## Make.com Scenario Details
+
+| Item | Value |
+|------|-------|
+| Scenario ID | 4560202 |
+| Name | Shards: Google Drive Auto-Sync |
+| Folder | Dez Production (231082) |
+| Schedule | Every 15 minutes |
+| Connection | `jeffrey@enneking.company` (ID: 1551176) |
+| URL | https://us1.make.com/300311/scenarios/4560202/edit |
+
+### Scenario Flow
+
+1. **Watch Files in Folder** — Watches `AA_FOR BUDGET TRACKING WEBSITE` (including subfolders) for newly created files
+2. **Get a File** — Downloads file content via Google Drive API
+3. **Router** — Routes to 4 paths:
+   - **Route 1 (Ledger)**: filename contains `6304-6342` → POST as `LEDGER`
+   - **Route 2 (PO Log)**: filename contains `PO-Log` → POST as `SMARTPO`
+   - **Route 3 (Invoice)**: parent folder is Invoices → POST as `INVOICE`
+   - **Route 4 (Check Request)**: parent folder is Check Requests → POST as `CHECK_REQUEST`
+4. **HTTP POST** — Sends file as multipart/form-data to Lambda `/sync`
+5. **Move to Archives** — Moves processed file to `/Archives/` folder
 
 ---
 
 ## Testing
 
-After activation, test by dropping a file into `/Ledgers/`:
+### Quick Test (Drop a file)
+1. Open Google Drive: https://drive.google.com/drive/folders/1ZWEcHz9oBYOm8gtXdxTJGFN8gzXWDgyn
+2. Upload a ledger file (e.g., `106 6304-6342 020626.xlsx`)
+3. Wait up to 15 minutes (or manually run the scenario)
+4. Check Make.com execution log: https://us1.make.com/300311/scenarios/4560202/edit
+5. Check dashboard: https://main.d2nhaxprh2fg8e.amplifyapp.com
 
-1. Copy any existing ledger file (e.g., `101 6304-6342 020626.xlsx`)
-2. Rename it slightly (e.g., add a space at the end)
-3. Drop it in the `/Ledgers/` folder
-4. Wait 2-3 minutes
-5. Check the dashboard — the file should be detected as a duplicate (same content hash) and skipped
-6. Check the Make.com scenario execution log to verify it ran
+### Manual Trigger
+To test immediately without waiting for the 15-minute poll:
+- Go to the Make.com scenario and click "Run once"
 
-To test with truly new data, you'll need a new ledger file from EP Accounting.
+### Curl Test (Direct Lambda)
+```bash
+curl -X POST \
+  "https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync" \
+  -F "file=@path/to/ledger.xlsx" \
+  -F "fileType=LEDGER" \
+  -F "syncSource=google-drive-auto" \
+  -F "syncSessionId=test-$(date +%s)" \
+  -F "fileName=106 6304-6342 020626.xlsx"
+```
+
+---
+
+## Sharing Access with Kirsten
+
+Kirsten (k.cornay@gmail.com) needs access to the Google Drive folders. To share:
+1. Open: https://drive.google.com/drive/folders/1ccQn099wEk5V2w6WmgtExw66azkgQu4M
+2. Click "Manage access"
+3. Add `k.cornay@gmail.com` with **Editor** access
+4. This gives her access to all subfolders (Ledgers, POs, etc.)
 
 ---
 
 ## Monitoring
 
-- **Make.com execution history**: https://us1.make.com/300311/scenarios/4528779/edit (click Executions tab)
-- **Lambda logs**: Check AWS CloudWatch for `location-manager-sync`
-- **Dashboard**: Numbers should update within 2-3 minutes of file drop
+- **Make.com executions**: https://us1.make.com/300311/scenarios/4560202/edit (Executions tab)
+- **Lambda logs**: AWS CloudWatch → `/aws/lambda/location-manager-sync`
+- **Dashboard**: https://main.d2nhaxprh2fg8e.amplifyapp.com
+- **S3 data**: `s3://location-manager-prod/processed/`

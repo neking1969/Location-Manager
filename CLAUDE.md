@@ -42,6 +42,9 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Vendor Location Map** | ✅ Done | Infers location from vendor history |
 | **Production Overhead** | ✅ Done | Categorizes uninferrable payroll/permits |
 | **Cloud-Only Architecture** | ✅ Done | Dashboard reads from Lambda/S3, no local files |
+| **Google Drive Auto-Sync** | ✅ **ACTIVE** | Scenario #4560202, polls every 15 min |
+| **Multipart File Upload** | ✅ Done | Lambda accepts multipart/form-data uploads |
+| **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Archives |
 | **PRODUCTION STATUS** | ✅ **READY** | All systems go! |
 
 ---
@@ -61,8 +64,22 @@ Budget tracking and Glide synchronization for The Shards TV production.
 ### Make.com
 | Item | Value |
 |------|-------|
-| Scenario ID | 4528779 |
+| Weekly Sync Scenario ID | 4528779 |
 | Webhook URL | `https://hook.us1.make.com/k3snwjfpk65auz4wa49tiancqdla1d1o` |
+| **Auto-Sync Scenario ID** | **4560202** |
+| Auto-Sync Schedule | Every 15 minutes |
+| Auto-Sync URL | `https://us1.make.com/300311/scenarios/4560202/edit` |
+| Google Drive Connection | ID 1551176 (`jeffrey@enneking.company`) |
+
+### Google Drive Folders (Auto-Sync)
+| Folder | Google Drive ID |
+|--------|----------------|
+| AA_FOR BUDGET TRACKING WEBSITE | `1ccQn099wEk5V2w6WmgtExw66azkgQu4M` |
+| /Ledgers | `1ZWEcHz9oBYOm8gtXdxTJGFN8gzXWDgyn` |
+| /POs | `128JxBOum6mCt_XexA5dSGUKRiyU8xvsg` |
+| /Check Requests | `1jwsFJu-QsyVVbv52k25klMZ5kVjALCHu` |
+| /Invoices | `1barija6FSQ2POU4Mt9bhn3osFvZ6vdRY` |
+| /Archives | `1uHCPpgl7XG9_OZox60r6lhJbaw1x7Xg1` |
 
 ### AWS Lambda (Main)
 | Item | Value |
@@ -113,6 +130,16 @@ bash lambda/deploy.sh
 ---
 
 ## Recent Changes (2026-02-13)
+
+24. ✅ **Google Drive Auto-Sync — COMPLETE** - Built end-to-end auto-sync pipeline: Kirsten drops files into Google Drive → Make.com detects (every 15 min) → downloads via Google Drive API → sends as multipart/form-data to Lambda → Lambda parses and writes to S3 → dashboard updates.
+    - Created Google Drive folder structure under `AF > The Shards: Season 1 > AA_FOR BUDGET TRACKING WEBSITE` with subfolders: Ledgers, POs, Check Requests, Invoices, Archives
+    - Built Make.com scenario #4560202 with Watch Files → Get File → Router (4 routes by filename/folder) → HTTP POST (multipart) → Move to Archives
+    - Added `parseMultipart.js` utility for Lambda to parse multipart/form-data without npm dependencies
+    - Updated Lambda handler to accept both JSON (existing Glide flow) and multipart (new Google Drive flow)
+    - Tested via curl multipart upload — Episode 106 ledger (34 txns) parsed successfully
+    - Files: `handler.js` (multipart body parsing), `src/utils/parseMultipart.js` (new), `docs/ACTIVATE-AUTO-SYNC.md` (rewritten)
+
+23. ✅ **Multipart File Upload Support** - Lambda `/sync` endpoint now accepts `multipart/form-data` uploads in addition to JSON with file URLs. Lambda Function URLs base64-encode binary bodies (`event.isBase64Encoded`). Custom multipart parser extracts files and form fields from boundary-delimited binary data. No new npm dependencies.
 
 22. ✅ **Non-Location Spend Indicator** - Added amber badge to Budget page episode headers showing payroll/overhead spend not tied to specific filming locations. Uses existing `nonLocationSpend` from API. Files: `EpisodeCard.tsx`, `page.tsx`.
 
@@ -228,6 +255,11 @@ bash lambda/deploy.sh
 23. **Budget parser must propagate totalFromMake to all maps** - When a location has `totalFromMake` but no line items, `byLocationEpisode` gets updated but `byEpisodeCategory` and `byCategoryLocationEpisode` must also be updated. Otherwise episodes show budget totals but $0 in all categories.
 24. **SERVICE_CHARGE locations need explicit classification** - `buildAliasLookup()` separates service charge patterns from budget aliases, but the matching loop must check `serviceChargePatterns` to classify them as `service_charge` rather than `no_budget_match`.
 25. **Location mappings version** - v2.4 as of 2026-02-13. 65 unmapped = 41 pending + 24 service_charge + 0 unknown.
+26. **Lambda Function URLs base64-encode binary bodies** - When a request has a binary Content-Type (like multipart/form-data), `event.isBase64Encoded` is `true` and `event.body` is base64. Must decode: `Buffer.from(event.body, 'base64')`.
+27. **Make.com `google-drive:getAFile` downloads file binary** - Use this before HTTP module to download file content. Then map `{{2.data}}` as the file value in multipart fields. Module version 4, requires `google-restricted` connection.
+28. **Make.com module names are camelCase** - `watchFilesInAFolder`, `getAFile`, `moveAFileIntoAFolder`, `copyAFile`. NOT `downloadAFile` or `searchFiles`.
+29. **Google Drive `uc?export=download` URLs need auth** - Can't use `https://drive.google.com/uc?export=download&id=...` from Lambda without Google credentials. Must have Make.com download the file first and send binary.
+30. **Make.com `listFiles` RPC always returns root** - The `folderId` parameter is ignored; it always lists root drive contents. Can't use this to browse specific folders.
 
 ---
 

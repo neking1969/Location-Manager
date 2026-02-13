@@ -12,7 +12,9 @@ Bookmark this link. It's your one-stop shop for budget vs actuals across all epi
 When you receive new files from EP Accounting, save them to the correct Google Drive folder. That's it. The system handles everything else automatically.
 
 ### Google Drive Location
-**Google Drive > THE SHARDS - SEASON 1 > AA_FOR BUDGET TRACKING WEBSITE**
+**Google Drive > Shared with me > AF > The Shards: Season 1 > AA_FOR BUDGET TRACKING WEBSITE**
+
+Direct link: https://drive.google.com/drive/folders/1ccQn099wEk5V2w6WmgtExw66azkgQu4M
 
 ### Folder Guide
 
@@ -36,13 +38,13 @@ When you receive new files from EP Accounting, save them to the correct Google D
 ## What Happens Automatically
 
 1. You drop a file into the Google Drive folder
-2. Make.com detects the new file (within 1-2 minutes)
+2. Make.com detects the new file (within 15 minutes)
 3. The file is sent to our processing system (Lambda)
 4. Transactions are parsed, categorized, and matched to locations
 5. The dashboard updates with new data
 6. The original file is moved to `/Archives/` so you know it was processed
 
-**Total time from file drop to dashboard update: ~2-3 minutes**
+**Total time from file drop to dashboard update: ~15 minutes** (scenario polls every 15 min)
 
 ---
 

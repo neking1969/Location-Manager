@@ -7,6 +7,7 @@ import { categorizeTransaction } from '../src/parsers/ledger.js';
 import { createGlideClient } from '../src/glide/client.js';
 import { transformBudgetData } from '../src/parsers/budget.js';
 import { generateFileHash, checkFileProcessed, markFileProcessed, classifyFileType } from '../src/utils/fileDeduplication.js';
+import { parseMultipart, extractBoundary } from '../src/utils/parseMultipart.js';
 
 const ALL_CATEGORIES = [
   'Loc Fees', 'Addl. Site Fees', 'Site Personnel', 'Permits',
@@ -733,9 +734,37 @@ export async function handler(event, context) {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
     const path = event.path || event.rawPath || '';
+    const contentType = event.headers?.['content-type'] || event.headers?.['Content-Type'] || '';
     console.log('[Handler] Path:', path, 'Method:', event.httpMethod || event.requestContext?.http?.method);
+    console.log('[Handler] Content-Type:', contentType);
+
+    // Parse body — supports JSON and multipart/form-data
+    let body = {};
+    let uploadedFiles = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      const boundary = extractBoundary(contentType);
+      if (!boundary) throw new Error('Missing multipart boundary');
+      const rawBody = event.isBase64Encoded
+        ? Buffer.from(event.body, 'base64')
+        : Buffer.from(event.body || '', 'utf8');
+      console.log(`[Handler] Parsing multipart body (${rawBody.length} bytes, boundary: ${boundary.substring(0, 20)}...)`);
+      const parsed = parseMultipart(rawBody, boundary);
+      body = parsed.fields;
+      uploadedFiles = parsed.files;
+      // Parse JSON fields that were stringified
+      for (const [key, val] of Object.entries(body)) {
+        try { body[key] = JSON.parse(val); } catch { /* keep as string */ }
+      }
+      console.log(`[Handler] Multipart: ${Object.keys(body).length} fields, ${uploadedFiles.length} files`);
+      if (uploadedFiles.length > 0) {
+        console.log(`[Handler] Uploaded files: ${uploadedFiles.map(f => `${f.filename} (${f.buffer.length} bytes)`).join(', ')}`);
+      }
+    } else {
+      body = JSON.parse(event.body || '{}');
+    }
+
     console.log('[Handler] Body keys:', Object.keys(body).join(', '));
     console.log('[Handler] Body preview:', JSON.stringify(body).substring(0, 500));
 
@@ -770,6 +799,13 @@ export async function handler(event, context) {
         for (const url of ledgerUrls) {
           try {
             const file = await downloadFile(url);
+
+            // Override filename if explicitly provided (Google Drive URLs don't contain real filenames)
+            if (body.fileName && ledgerUrls.length === 1) {
+              console.log(`[Handler] Overriding filename from "${file.filename}" to "${body.fileName}"`);
+              file.filename = body.fileName;
+            }
+
             const fileHash = generateFileHash(file.buffer);
 
             // Check for duplicates
@@ -819,6 +855,42 @@ export async function handler(event, context) {
           }
         }
         console.log(`[Handler] Processed ${processedFiles.length} files, skipped ${skippedDuplicates.length} duplicates`);
+      }
+
+      // Handle multipart file uploads (from Make.com Google Drive auto-sync)
+      if (uploadedFiles.length > 0 && !syncInput.ledgerFiles?.length) {
+        console.log(`[Handler] Processing ${uploadedFiles.length} multipart-uploaded file(s)...`);
+        syncInput.ledgerFiles = syncInput.ledgerFiles || [];
+
+        for (const uploaded of uploadedFiles) {
+          const file = { filename: uploaded.filename, buffer: uploaded.buffer };
+          const fileHash = generateFileHash(file.buffer);
+
+          // Check for duplicates
+          const dedupCheck = await checkFileProcessed(fileHash, file.filename);
+          if (dedupCheck.isDuplicate && syncSource === 'google-drive-auto') {
+            console.log(`[Handler] SKIPPED duplicate upload: ${file.filename}`);
+            skippedDuplicates.push({ fileName: file.filename, previousSync: dedupCheck.previousSync });
+            continue;
+          }
+
+          const detectedType = explicitFileType || classifyFileType(file.filename, filePath);
+          console.log(`[Handler] Uploaded: ${file.filename} (${file.buffer.length} bytes) - Type: ${detectedType}`);
+
+          if (detectedType === 'LEDGER') {
+            syncInput.ledgerFiles.push(file);
+          } else if (detectedType === 'SMARTPO') {
+            syncInput.smartpoFile = file;
+          } else if (detectedType === 'INVOICE' || detectedType === 'CHECK_REQUEST') {
+            console.log(`[Handler] ${detectedType} file received but not yet processed: ${file.filename}`);
+            processedFiles.push({ fileName: file.filename, fileType: detectedType, fileHash, status: 'logged-only' });
+          } else {
+            console.warn(`[Handler] Unknown file type for ${file.filename}, treating as LEDGER`);
+            syncInput.ledgerFiles.push(file);
+          }
+
+          processedFiles.push({ fileName: file.filename, fileType: detectedType, fileHash, status: 'processed' });
+        }
       }
 
       // Support multiple SmartPO files (array, comma-separated string, or single URL)
