@@ -112,6 +112,16 @@ bash lambda/deploy.sh
 
 ---
 
+## Recent Changes (2026-02-13)
+
+19. ✅ **$921K Transaction Recovery** - Fixed two bugs causing dashboard to show $5.49M instead of $6.41M:
+    - **Service charge filter** (`handler.js:474-477`): `isServiceCharge()` used bidirectional substring matching that incorrectly dropped 126 txns/$931K. "parking" pattern matched real locations like "Buckley Courtyard / Parking Lot" ($463K lost) and "3rd Floor Parking Garage" ($61K lost). Even true service charges (GUARDS, PERMITS) are valid GL expenditures. Fix: Removed filter entirely; service charges now flow through normal location matching.
+    - **txId hash collisions** (`ledger.js:592-600`): Hash of vendor+amount+desc+episode+GL+transNumber+transType lost 45 txns/$47K from identical-looking rows (e.g., 8 monthly GLOBUG rentals at $2,400). Fix: Added `rowIndex` and `filename` to hash; all 1,912 txIds now unique.
+    - **Result**: Dashboard=$6,413,088.32 = exact match with raw GL ledgers and Kirsten's email ($6,413,088.23).
+    - Re-parsed all 4 ledger files and wrote to S3 with new unique txIds.
+
+---
+
 ## Recent Changes (2026-02-11)
 
 18. ✅ **Transaction-Level Deduplication System** - FIXED critical bug in `mergeLedgers()` function that was overwriting entire ledgers instead of deduplicating individual transactions. Rewrote to flatten all transactions, deduplicate by `txId` (hash of vendor, amount, description, episode, glCode, transNumber, transType), and rebuild ledger structure. Added automatic archival of existing transaction data to `archives/transactions/{date}-{session}-pre-merge.json` before any merge operation. Logs now show deduplication stats (e.g., "Deduplicated 42 duplicate transactions"). Next ledger upload will be foolproof - zero data loss guaranteed. File: `src/utils/writeProcessedData.js:3-64,120-152`.
@@ -199,6 +209,10 @@ bash lambda/deploy.sh
 16. **Addl. Labor has no GL code** - Budget items are payroll positions (Layout Tech, A/C Operator, KALM, ALM, etc.) that share GL 6342 + PR with Site Personnel. No way to distinguish without name-matching. $292K budget, $0 actual is expected.
 17. **Glide category display order** - Loc Fees, Addl. Site Fees, Site Personnel, Permits, Addl. Labor, Equipment, Parking, Fire, Police, Security. Defined as `CATEGORY_ORDER` in route.ts.
 18. **Button style convention** - NEVER use solid fills (`bg-color text-white`). All buttons use outline + semi-transparent: action buttons `bg-{color}/20 text-{color}-400 border border-{color}/30`, active toggles/pills `ring-1 ring-{color}/50`, neutral buttons `bg-[var(--card)] text-[var(--muted)] border border-[var(--card-border)]`.
+19. **NEVER filter out service charge transactions** - Service charges (PERMITS, GUARDS, BASECAMP, etc.) are valid GL expenditures that count toward episode actuals. The old `isServiceCharge()` filter incorrectly dropped $931K using bidirectional substring matching that caught real locations containing "parking", "fire", "security", etc.
+20. **txId hash must include rowIndex + filename** - Without these, identical-looking rows (same vendor, amount, description, etc.) produce the same hash and get incorrectly deduped. Monthly recurring charges are the main casualty.
+21. **Kirsten's totals are authoritative** - Her email totals ($6,413,088.23) match raw GL ledger files within pennies. Our dashboard should match her numbers. Ep 105 budget discrepancy ($840,390 vs $821,355) still needs investigation.
+22. **No-location transactions are mostly payroll** - 1,061 transactions (mostly Police PR and Site Personnel PR) have no location in the ledger. They're real spend that counts toward episode totals but can't be assigned to specific filming locations.
 
 ---
 
@@ -224,6 +238,37 @@ Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
 ```
 
 **Key Point**: The dashboard works entirely from AWS. No local files required.
+
+---
+
+## Reconciliation Reference (2026-02-13)
+
+### Verified Totals (all match within pennies)
+| Source | Total |
+|--------|-------|
+| Raw GL ledger files (4 files, 02/06/26) | $6,413,088.32 |
+| S3 stored data (1,912 txns) | $6,413,088.32 |
+| Lambda /data endpoint | $6,413,088.32 |
+| Kirsten's email (Feb 10) | $6,413,088.23 |
+
+### Per-Episode Actuals
+| Episode | Dashboard | Kirsten | Status |
+|---------|----------|---------|--------|
+| 101+102 | $4,203,200.53 | $4,203,200.50 | MATCH |
+| 104 | $1,389,830.66 | $1,389,830.60 | MATCH |
+| 105 | $745,323.33 | $745,323.33 | MATCH |
+| 106 | $74,733.80 | $74,733.80 | MATCH |
+
+### Dashboard Breakdown (after fixes)
+- Budgeted locations: 711 txns / $5,201,403
+- Unmapped locations: 140 txns / $554,348 (66 locations, mix of pending + no-budget-match)
+- No-location: 1,061 txns / $657,337 (mostly Police/Site Personnel payroll)
+
+### Known Open Items
+1. **Ep 105 budget discrepancy** - Kirsten=$840,390, Glide=$821,355 (diff $19,035). Need to check Glide budget data.
+2. **66 unmapped locations** - 24 PENDING (need Glide budget entries), rest are generic service names (PERMITS, GUARDS, BASECAMP, etc.)
+3. **Dashboard UI may need update** - Amplify dashboard hasn't been redeployed since the Lambda fix. The Shards-Ledger-App `/api/episodes` route fetches from Lambda, so numbers should auto-update, but worth verifying visually.
+4. **Kirsten's Ep 106 variance math** - She wrote "Under Budget: $32,991.60" but $120,795 - $74,733.80 = $46,061.20. Minor data entry error on her part.
 
 ---
 
