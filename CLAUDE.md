@@ -114,6 +114,18 @@ bash lambda/deploy.sh
 
 ## Recent Changes (2026-02-13)
 
+22. ✅ **Non-Location Spend Indicator** - Added amber badge to Budget page episode headers showing payroll/overhead spend not tied to specific filming locations. Uses existing `nonLocationSpend` from API. Files: `EpisodeCard.tsx`, `page.tsx`.
+
+21. ✅ **Service Charge Classification** - Handler now properly classifies SERVICE_CHARGE locations (PERMITS, GUARDS, BASECAMP, etc.) as `reason: 'service_charge'` instead of `no_budget_match`. 24 service charge locations ($288K) now properly labeled. File: `handler.js:534-543`.
+
+20. ✅ **Location Mapping Expansion** (v2.4) - Reduced truly unknown locations from ~30 to 0:
+    - Mapped ASYLUM→Melrose Video Bar ($35K), SYCAMORE COVE→Malibu Beach ($20K), STAR MAKE UP ROOM/HALLWAY/SLPS BACKLOT→SLP Stage ($19K), SKATE RINK→Roller Rink, KELLBER'S→Keller Residence, CYN→Benedict Canyon, MULHOLLAND HWY→Woodley Ave, REPROG DISCO BALLS→Roller Rink
+    - Added 21 new PENDING locations (Bristol Ave, Bronson Caves, Wilton Pl, etc.)
+    - Added CHAIRS, DRIVING SUPPORT, SITE REP/REPAIRS as SERVICE_CHARGE
+    - Result: 65 unmapped = 41 pending + 24 service_charge + 0 unknown
+
+19bis. ✅ **Ep 105 Budget Category Fix** - Budget parser was showing $821K episode total but $0 in all categories. Root cause: locations with `totalFromMake` but no line items were added to `byLocationEpisode` but not `byEpisodeCategory` or `byCategoryLocationEpisode`. Fix: now propagates budget to all three maps. File: `budget.js:182-210`.
+
 19. ✅ **$921K Transaction Recovery** - Fixed two bugs causing dashboard to show $5.49M instead of $6.41M:
     - **Service charge filter** (`handler.js:474-477`): `isServiceCharge()` used bidirectional substring matching that incorrectly dropped 126 txns/$931K. "parking" pattern matched real locations like "Buckley Courtyard / Parking Lot" ($463K lost) and "3rd Floor Parking Garage" ($61K lost). Even true service charges (GUARDS, PERMITS) are valid GL expenditures. Fix: Removed filter entirely; service charges now flow through normal location matching.
     - **txId hash collisions** (`ledger.js:592-600`): Hash of vendor+amount+desc+episode+GL+transNumber+transType lost 45 txns/$47K from identical-looking rows (e.g., 8 monthly GLOBUG rentals at $2,400). Fix: Added `rowIndex` and `filename` to hash; all 1,912 txIds now unique.
@@ -213,6 +225,9 @@ bash lambda/deploy.sh
 20. **txId hash must include rowIndex + filename** - Without these, identical-looking rows (same vendor, amount, description, etc.) produce the same hash and get incorrectly deduped. Monthly recurring charges are the main casualty.
 21. **Kirsten's totals are authoritative** - Her email totals ($6,413,088.23) match raw GL ledger files within pennies. Our dashboard should match her numbers. Ep 105 budget discrepancy ($840,390 vs $821,355) still needs investigation.
 22. **No-location transactions are mostly payroll** - 1,061 transactions (mostly Police PR and Site Personnel PR) have no location in the ledger. They're real spend that counts toward episode totals but can't be assigned to specific filming locations.
+23. **Budget parser must propagate totalFromMake to all maps** - When a location has `totalFromMake` but no line items, `byLocationEpisode` gets updated but `byEpisodeCategory` and `byCategoryLocationEpisode` must also be updated. Otherwise episodes show budget totals but $0 in all categories.
+24. **SERVICE_CHARGE locations need explicit classification** - `buildAliasLookup()` separates service charge patterns from budget aliases, but the matching loop must check `serviceChargePatterns` to classify them as `service_charge` rather than `no_budget_match`.
+25. **Location mappings version** - v2.4 as of 2026-02-13. 65 unmapped = 41 pending + 24 service_charge + 0 unknown.
 
 ---
 
@@ -259,16 +274,16 @@ Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
 | 105 | $745,323.33 | $745,323.33 | MATCH |
 | 106 | $74,733.80 | $74,733.80 | MATCH |
 
-### Dashboard Breakdown (after fixes)
-- Budgeted locations: 711 txns / $5,201,403
-- Unmapped locations: 140 txns / $554,348 (66 locations, mix of pending + no-budget-match)
+### Dashboard Breakdown (after all fixes)
+- Budgeted locations: 50 locations matched to Glide budgets
+- Unmapped locations: 65 total = 41 pending + 24 service_charge + 0 unknown
 - No-location: 1,061 txns / $657,337 (mostly Police/Site Personnel payroll)
+- Ep 105 categories: All 10 populated (was $0 across the board)
 
 ### Known Open Items
-1. **Ep 105 budget discrepancy** - Kirsten=$840,390, Glide=$821,355 (diff $19,035). Need to check Glide budget data.
-2. **66 unmapped locations** - 24 PENDING (need Glide budget entries), rest are generic service names (PERMITS, GUARDS, BASECAMP, etc.)
-3. **Dashboard UI may need update** - Amplify dashboard hasn't been redeployed since the Lambda fix. The Shards-Ledger-App `/api/episodes` route fetches from Lambda, so numbers should auto-update, but worth verifying visually.
-4. **Kirsten's Ep 106 variance math** - She wrote "Under Budget: $32,991.60" but $120,795 - $74,733.80 = $46,061.20. Minor data entry error on her part.
+1. **Ep 105 budget discrepancy** - Kirsten=$840,390, Glide=$821,355 (diff $19,035). This is a **Glide data issue** — `totalFromMake` values in Glide sum to $821K, not $840K. Code is correct. Needs manual audit of Ep 105 location budgets in Glide vs Kirsten's spreadsheet.
+2. **41 PENDING locations** - Real filming locations ($233K total) that need Glide budget entries. Top: Bristol Ave ($27K), Wilton Pl ($24K), Bronson Caves ($22K), Hill Dr ($18K).
+3. **Kirsten's Ep 106 variance math** - She wrote "Under Budget: $32,991.60" but $120,795 - $74,733.80 = $46,061.20. Minor data entry error on her part.
 
 ---
 
