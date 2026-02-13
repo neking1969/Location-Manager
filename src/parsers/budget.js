@@ -171,6 +171,7 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
 
   // Use totalFromMake as authoritative budget when available (from Glide spreadsheet)
   // Line item calculations can diverge from the original budget spreadsheet totals
+  // Also propagate corrections to byEpisodeCategory and byCategoryLocationEpisode
   for (const loc of locationsBudgets || []) {
     const authoritative = parseFloat(loc.totalFromMake) || 0;
     if (authoritative <= 0) continue;
@@ -184,12 +185,39 @@ export function transformBudgetData(locationsBudgets, budgetLineItems, episodes,
       const locRowId = loc.$rowID;
       const episodeName = locationBudgetEpisodeLookup.get(locRowId) || 'all';
       byLocationEpisode.push({ location: locName, episode: episodeName, totalBudget: authoritative });
-      console.log(`[Budget] Added missing location ${locName}: $${authoritative.toFixed(0)} (no line items)`);
+      // Also add to category maps so episode category breakdowns aren't empty
+      // Default to "Loc Fees" since we have no line item categories to reference
+      byEpisodeCategory.push({ episode: episodeName, category: 'Loc Fees', totalBudget: authoritative });
+      byCategoryLocationEpisode.push({ category: 'Loc Fees', location: locName, episode: episodeName, totalBudget: authoritative });
+      console.log(`[Budget] Added missing location ${locName}: $${authoritative.toFixed(0)} (ep ${episodeName}, no line items, defaulted to Loc Fees)`);
     } else if (Math.abs(authoritative - calculated) > 1) {
       // Scale line item amounts to match authoritative total
       const scale = authoritative / calculated;
       for (const entry of locEntries) {
         entry.totalBudget *= scale;
+      }
+      // Also scale matching category entries
+      const catLocEntries = byCategoryLocationEpisode.filter(item => item.location === locName);
+      for (const entry of catLocEntries) {
+        entry.totalBudget *= scale;
+      }
+      const epCatEntries = byEpisodeCategory.filter(item => {
+        const eps = locEntries.map(e => e.episode);
+        return eps.includes(item.episode);
+      });
+      // For epCat, we need to scale only the portion that belongs to this location
+      // Since epCat aggregates across all locations, we adjust by the delta
+      const delta = authoritative - calculated;
+      if (epCatEntries.length > 0) {
+        // Distribute the delta proportionally across the location's categories
+        const catTotals = catLocEntries.reduce((sum, e) => sum + (e.totalBudget / scale), 0); // pre-scale totals
+        for (const catEntry of catLocEntries) {
+          const catEpEntry = epCatEntries.find(e => e.episode === catEntry.episode && e.category === catEntry.category);
+          if (catEpEntry) {
+            const proportion = catTotals > 0 ? (catEntry.totalBudget / scale) / catTotals : 0;
+            catEpEntry.totalBudget += delta * proportion;
+          }
+        }
       }
       console.log(`[Budget] Corrected ${locName}: calculated $${calculated.toFixed(0)} -> authoritative $${authoritative.toFixed(0)}`);
     }

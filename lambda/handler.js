@@ -531,9 +531,19 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       entry.transactions.push(...actuals.transactions);
       entry.matchTypes.add(match.matchType);
     } else {
+      // Check if this is a known SERVICE_CHARGE (production overhead)
+      const isServiceCharge = serviceChargePatterns.includes(key);
       // Check if this is a PENDING location (known but not yet in Glide)
       const pendingName = pendingLocations.get(key);
-      if (pendingName) {
+      if (isServiceCharge) {
+        unmappedLocations.push({
+          locationName: actuals.locationName,
+          totalAmount: actuals.totalAmount,
+          transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'service_charge' })),
+          reason: 'service_charge',
+          reasonLabel: 'Production overhead (no budget location)'
+        });
+      } else if (pendingName) {
         unmappedLocations.push({
           locationName: actuals.locationName,
           totalAmount: actuals.totalAmount,

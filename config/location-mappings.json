@@ -38,7 +38,7 @@
     {
       "ledgerLocation": "MELROSE VIDEO BAR",
       "budgetLocation": "Ext. Melrose Video Bar",
-      "aliases": ["MELROSE BAR", "MLROSE BAR", "MLROSE BAR(102", "MELROSE VIDEO", "EXT MELROSE", "EXT. MELROSE AVE.", "MELRSE VID BR", "MELROSE/ASYLUM", "ASYLUM/MELROSE VIDEO BAR BA", "ASYLUM/VIDEO BAR", "MELRSE VID BAR", "MLROSE BAR(102)"]
+      "aliases": ["MELROSE BAR", "MLROSE BAR", "MLROSE BAR(102", "MELROSE VIDEO", "EXT MELROSE", "EXT. MELROSE AVE.", "MELRSE VID BR", "MELROSE/ASYLUM", "ASYLUM/MELROSE VIDEO BAR BA", "ASYLUM/VIDEO BAR", "MELRSE VID BAR", "MLROSE BAR(102)", "ASYLUM"]
     },
     {
       "ledgerLocation": "BUNGALOW",
@@ -58,7 +58,7 @@
     {
       "ledgerLocation": "ROLLER RINK",
       "budgetLocation": "Moonlight Roller Rink ",
-      "aliases": ["MOONLIGHT ROLLER RINK", "MOONLIGHT RINK", "ROLLER SKATING"]
+      "aliases": ["MOONLIGHT ROLLER RINK", "MOONLIGHT RINK", "ROLLER SKATING", "REPROG DISCO BALLS", "SKATE RINK"]
     },
     {
       "ledgerLocation": "RINK ALLEY",
@@ -103,7 +103,7 @@
     {
       "ledgerLocation": "KELLER RESIDENCE",
       "budgetLocation": "Matt's Pool House/Keller Residence (101 & 102)",
-      "aliases": ["MATTS POOL HOUSE", "MATT'S POOL HOUSE", "KELLER", "POOL HOUSE", "KELLNER HOUSE", "KELLNERS HOUSE", "KELLNER'S HOUSE", "MATT KELLNER HOUSE", "KELLER'S HOUSE", "MATT KELLNER'S HOUSE"]
+      "aliases": ["MATTS POOL HOUSE", "MATT'S POOL HOUSE", "KELLER", "POOL HOUSE", "KELLNER HOUSE", "KELLNERS HOUSE", "KELLNER'S HOUSE", "MATT KELLNER HOUSE", "KELLER'S HOUSE", "MATT KELLNER'S HOUSE", "KELLBER'S HOUSE"]
     },
     {
       "ledgerLocation": "DEBBIE'S HOUSE",
@@ -128,7 +128,7 @@
     {
       "ledgerLocation": "BENEDICT CANYON",
       "budgetLocation": "Benedict Canyon House",
-      "aliases": ["BENEDICT CANYON HOUSE"]
+      "aliases": ["BENEDICT CANYON HOUSE", "CYN"]
     },
     {
       "ledgerLocation": "LATCHFORD",
@@ -168,12 +168,12 @@
     {
       "ledgerLocation": "SLP STAGE",
       "budgetLocation": "Sunset Las Palmas - Stage - Dance Off ",
-      "aliases": ["SUNSET LAS PALMAS", "DANCE OFF STAGE", "SLP", "LAS PALMAS STAGE"]
+      "aliases": ["SUNSET LAS PALMAS", "DANCE OFF STAGE", "SLP", "LAS PALMAS STAGE", "STAR MAKE UP ROOM", "STARS MAKE UP ROOM", "HALLWAY/STUDIO LOT", "SLPS BACKLOT", "SLPS"]
     },
     {
       "ledgerLocation": "MALIBU BEACH",
       "budgetLocation": "Ext Malibu Remote Beach ",
-      "aliases": ["REMOTE BEACH", "MALIBU REMOTE BEACH"]
+      "aliases": ["REMOTE BEACH", "MALIBU REMOTE BEACH", "SYCAMORE COVE"]
     },
     {
       "ledgerLocation": "PCH DRIVING",
@@ -183,7 +183,7 @@
     {
       "ledgerLocation": "WOODLEY AVE",
       "budgetLocation": "Ext. Mullholland Drive (WOODLEY AVE)",
-      "aliases": ["WOODLEY", "MULHOLLAND WOODLEY"]
+      "aliases": ["WOODLEY", "MULHOLLAND WOODLEY", "MULHOLLAND HWY", "M-01275"]
     },
     {
       "ledgerLocation": "PARKING GARAGE",
@@ -218,7 +218,7 @@
     {
       "ledgerLocation": "SITE REP",
       "budgetLocation": "SERVICE_CHARGE",
-      "aliases": ["SITE REPS", "SITE REPRESENTATIVE"]
+      "aliases": ["SITE REPS", "SITE REPRESENTATIVE", "SITE REP/REPAIRS"]
     },
     {
       "ledgerLocation": "GUARDS",
@@ -383,7 +383,7 @@
     {
       "ledgerLocation": "POOL PARTY HOUSE",
       "budgetLocation": "PENDING:Pool Party House",
-      "aliases": []
+      "aliases": ["POOL PARTY"]
     },
     {
       "ledgerLocation": "UCLA",
@@ -417,19 +417,129 @@
     },
     {
       "ledgerLocation": "STARS MAKEUP ROOM",
-      "budgetLocation": "PENDING:Stars Makeup Room",
+      "budgetLocation": "SERVICE_CHARGE",
       "aliases": ["STARS MAKEUP", "MAKEUP ROOM"]
     },
     {
       "ledgerLocation": "GLOBUG",
       "budgetLocation": "SERVICE_CHARGE",
       "aliases": ["GLOBUGS"]
+    },
+    {
+      "ledgerLocation": "CHAIRS",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["TABLES/CHAIRS", "TABLE/CHAIRS"]
+    },
+    {
+      "ledgerLocation": "DRIVING SUPPORT",
+      "budgetLocation": "SERVICE_CHARGE",
+      "aliases": ["DRIVING SUPPORT SPACE"]
+    },
+    {
+      "ledgerLocation": "GRIFFITH PARK",
+      "budgetLocation": "PENDING:Griffith Park",
+      "aliases": ["GRIFFITH"]
+    },
+    {
+      "ledgerLocation": "BONFIRE",
+      "budgetLocation": "PENDING:Desert Bonfire",
+      "aliases": ["DESERT BONFIRE"]
+    },
+    {
+      "ledgerLocation": "BRISTOL AVE",
+      "budgetLocation": "PENDING:Bristol Ave",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "WILTON PL",
+      "budgetLocation": "PENDING:Wilton Pl",
+      "aliases": ["WILTON"]
+    },
+    {
+      "ledgerLocation": "BRONSON CAVES",
+      "budgetLocation": "PENDING:Bronson Caves",
+      "aliases": ["BRONSON"]
+    },
+    {
+      "ledgerLocation": "HILL DR",
+      "budgetLocation": "PENDING:Hill Dr",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "WELLINGTON RD",
+      "budgetLocation": "PENDING:Wellington Rd",
+      "aliases": ["WELLINGTON"]
+    },
+    {
+      "ledgerLocation": "COLORADO BLVD",
+      "budgetLocation": "PENDING:Colorado Blvd",
+      "aliases": ["COLORADO"]
+    },
+    {
+      "ledgerLocation": "WILL ROGERS",
+      "budgetLocation": "PENDING:Will Rogers",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "1/21 DRIVING",
+      "budgetLocation": "PENDING:1/21 Driving",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "DRIVING-CIELO",
+      "budgetLocation": "PENDING:Driving-Cielo",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "CAMPUS",
+      "budgetLocation": "PENDING:Campus",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "SYCAMORE AVE",
+      "budgetLocation": "PENDING:Sycamore Ave",
+      "aliases": ["SYCAMORE"]
+    },
+    {
+      "ledgerLocation": "S LONGWOOD",
+      "budgetLocation": "PENDING:S Longwood",
+      "aliases": ["LONGWOOD"]
+    },
+    {
+      "ledgerLocation": "BERNSTEIN HS",
+      "budgetLocation": "PENDING:Bernstein HS",
+      "aliases": ["BERNSTEIN"]
+    },
+    {
+      "ledgerLocation": "OCCIDENTAL",
+      "budgetLocation": "PENDING:Occidental",
+      "aliases": []
+    },
+    {
+      "ledgerLocation": "LA ZOO",
+      "budgetLocation": "PENDING:LA Zoo",
+      "aliases": ["LOS ANGELES ZOO"]
+    },
+    {
+      "ledgerLocation": "FIGUEROA ST",
+      "budgetLocation": "PENDING:Figueroa St",
+      "aliases": ["FIGUEROA"]
+    },
+    {
+      "ledgerLocation": "DEER CREEK RD",
+      "budgetLocation": "PENDING:Deer Creek Rd",
+      "aliases": ["DEER CREEK", "DEER CREEK RCD"]
+    },
+    {
+      "ledgerLocation": "LAS VIRGENES",
+      "budgetLocation": "PENDING:Las Virgenes",
+      "aliases": []
     }
   ],
   "notes": {
-    "SERVICE_CHARGE": "Production overhead services not tied to specific locations - excluded from budget comparison",
+    "SERVICE_CHARGE": "Production overhead services not tied to specific locations - counted in episode actuals but not mapped to budget locations",
     "PENDING": "New locations that need to be added to Glide Budgets and Master Locations tables",
-    "updated": "2026-02-06",
-    "version": "2.3"
+    "updated": "2026-02-13",
+    "version": "2.4"
   }
 }
