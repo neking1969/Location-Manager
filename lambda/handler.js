@@ -735,8 +735,9 @@ export async function handler(event, context) {
 
   try {
     const path = event.path || event.rawPath || '';
+    const method = event.httpMethod || event.requestContext?.http?.method || 'POST';
     const contentType = event.headers?.['content-type'] || event.headers?.['Content-Type'] || '';
-    console.log('[Handler] Path:', path, 'Method:', event.httpMethod || event.requestContext?.http?.method);
+    console.log('[Handler] Path:', path, 'Method:', method);
     console.log('[Handler] Content-Type:', contentType);
 
     // Parse body — supports JSON and multipart/form-data
@@ -975,7 +976,6 @@ export async function handler(event, context) {
     } else if (path.includes('/approve')) {
       result = await handleApproval(body);
     } else if (path.includes('/mappings')) {
-      const method = event.httpMethod || event.requestContext?.http?.method || 'POST';
       if (method === 'GET') {
         try {
           const mappings = await readJsonFromS3('config/location-mappings.json');
@@ -1007,7 +1007,6 @@ export async function handler(event, context) {
         console.log(`[Handler] Saved ${newMappings.length} new mappings, total: ${finalMappings.length}`);
       }
     } else if (path.includes('/overrides')) {
-      const method = event.httpMethod || event.requestContext?.http?.method || 'POST';
       if (method === 'GET') {
         try {
           const data = await readJsonFromS3('config/transaction-overrides.json');
@@ -1360,6 +1359,36 @@ export async function handler(event, context) {
           }
         }
       }
+    } else if (path.includes('/trigger-sync') && method === 'POST') {
+      const makeToken = process.env.MAKE_API_TOKEN;
+      if (!makeToken) {
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'MAKE_API_TOKEN not configured' })
+        };
+      }
+      const scenarioId = 4560202;
+      console.log(`[Handler] Triggering Make.com scenario ${scenarioId}`);
+      const makeResp = await fetch(`https://us1.make.com/api/v2/scenarios/${scenarioId}/run`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${makeToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ responsive: true })
+      });
+      const makeResult = await makeResp.json();
+      if (!makeResp.ok) {
+        console.error('[Handler] Make.com run failed:', makeResult);
+        return {
+          statusCode: makeResp.status,
+          headers,
+          body: JSON.stringify({ error: 'Make.com scenario trigger failed', details: makeResult })
+        };
+      }
+      console.log('[Handler] Make.com scenario triggered:', makeResult);
+      result = { success: true, executionId: makeResult.executionId, scenarioId };
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
     } else {
