@@ -45,6 +45,8 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Google Drive Auto-Sync** | ✅ **ACTIVE** | Scenario #4560202, polls every 15 min |
 | **Multipart File Upload** | ✅ Done | Lambda accepts multipart/form-data uploads |
 | **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Archives |
+| **Sync Now Button** | ✅ Done | Triggers Make.com scenario on-demand from dashboard |
+| **File Confirmation Blur** | ✅ Done | Dashboard blurred until all source files confirmed |
 | **PRODUCTION STATUS** | ✅ **READY** | All systems go! |
 
 ---
@@ -91,6 +93,7 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Data Endpoint** | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/data` |
 | Health Endpoint | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/health` |
 | Mappings Endpoint | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/mappings` |
+| **Trigger Sync Endpoint** | `https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/trigger-sync` |
 
 ### AWS Lambda (Sync Status Reader)
 | Item | Value |
@@ -108,6 +111,7 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | Sync Summary | `processed/latest-sync-summary.json` |
 | Budget Data | `static/parsed-budgets.json` |
 | Location Mappings | `config/location-mappings.json` |
+| File Confirmations | `processed/file-confirmations.json` |
 
 ### Dashboard
 | Item | Value |
@@ -130,6 +134,10 @@ bash lambda/deploy.sh
 ---
 
 ## Recent Changes (2026-02-13)
+
+26. ✅ **File Confirmation Blur Overlay** - Dashboard content is blurred/dimmed/non-interactive on every page load until Kirsten confirms all source files are current and accurate. FileVerification component now exposes `onAllConfirmed` callback prop. Summary page wraps all content below file cards in a conditional blur container (`blur-sm opacity-40 pointer-events-none select-none`). Smooth 500ms transition when blur lifts. Resets on every page navigation. Files: `FileVerification.tsx` (callback prop), `summary/page.tsx` (blur wrapper + state).
+
+25. ✅ **Sync Now Button** - Added "Sync Now" button to dashboard header nav. Triggers Make.com auto-sync scenario #4560202 on-demand via Lambda `/trigger-sync` endpoint (proxies to Make.com REST API). Make.com API token stored as Lambda env var `MAKE_API_TOKEN`. Button shows spinner during sync, checkmark on success, X on error. Auto-resets after 4-5s. Files: `handler.js` (new `/trigger-sync` endpoint), `SyncNowButton.tsx` (new component), `api/trigger-sync/route.ts` (new API proxy), `layout.tsx` (added to nav).
 
 24. ✅ **Google Drive Auto-Sync — COMPLETE** - Built end-to-end auto-sync pipeline: Kirsten drops files into Google Drive → Make.com detects (every 15 min) → downloads via Google Drive API → sends as multipart/form-data to Lambda → Lambda parses and writes to S3 → dashboard updates.
     - Created Google Drive folder structure under `AF > The Shards: Season 1 > AA_FOR BUDGET TRACKING WEBSITE` with subfolders: Ledgers, POs, Check Requests, Invoices, Archives
@@ -260,6 +268,9 @@ bash lambda/deploy.sh
 28. **Make.com module names are camelCase** - `watchFilesInAFolder`, `getAFile`, `moveAFileIntoAFolder`, `copyAFile`. NOT `downloadAFile` or `searchFiles`.
 29. **Google Drive `uc?export=download` URLs need auth** - Can't use `https://drive.google.com/uc?export=download&id=...` from Lambda without Google credentials. Must have Make.com download the file first and send binary.
 30. **Make.com `listFiles` RPC always returns root** - The `folderId` parameter is ignored; it always lists root drive contents. Can't use this to browse specific folders.
+31. **Make.com scenario trigger via REST API** - `POST https://us1.make.com/api/v2/scenarios/{id}/run` with `Authorization: Token {token}`. Works even for scheduled (non-webhook) scenarios. Returns `{executionId}`. Token stored as Lambda env var `MAKE_API_TOKEN`.
+32. **FileVerification callback pattern** - Pass `onAllConfirmed?: (confirmed: boolean) => void` to expose internal state to parent. Fires on initial load and after each confirmation. Used by summary page to control blur overlay.
+33. **Lambda env vars** - `GLIDE_APP_ID`, `GLIDE_API_KEY`, `MAKE_API_TOKEN`. Set via `aws lambda update-function-configuration --environment`.
 
 ---
 

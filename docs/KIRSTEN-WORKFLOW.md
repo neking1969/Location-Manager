@@ -46,6 +46,22 @@ Direct link: https://drive.google.com/drive/folders/1ccQn099wEk5V2w6WmgtExw66azk
 
 **Total time from file drop to dashboard update: ~15 minutes** (scenario polls every 15 min)
 
+### Sync Now Button
+Don't want to wait 15 minutes? Click the **Sync Now** button in the top navigation bar. This immediately triggers the Google Drive check. You'll see a spinner while it's working, then a checkmark when done.
+
+---
+
+## When You Open the Dashboard
+
+The dashboard is **blurred out** when you first open it. This is by design — you need to verify the source files are correct before trusting the numbers.
+
+1. You'll see **Source File cards** at the top (not blurred)
+2. Review each file — check the episode, transaction count, and report date
+3. Click **"Confirm Current & Accurate"** on each file card
+4. Once all files are confirmed, the blur lifts and the full dashboard is visible
+
+This happens every time you visit the dashboard, so you always verify the data is fresh.
+
 ---
 
 ## Dashboard Pages (What They Show)
@@ -99,10 +115,11 @@ These are the key numbers from the current data (as of Feb 13, 2026):
 
 ## If Something Looks Wrong
 
-1. **Numbers seem stale**: Press `Cmd + Shift + R` (hard refresh) to clear the cache
-2. **A location is "unmapped"**: The system couldn't match a ledger location name to a Glide budget entry. Let Jeffrey know and he'll update the mapping
-3. **A new file didn't process**: Check the Archives folder in Google Drive — if the file was moved there, it processed. If it's still in the original folder, the auto-sync may not be active yet
-4. **Episode totals don't match your spreadsheet**: The dashboard uses GL ledger data as the source of truth. Small rounding differences (pennies) are normal
+1. **Numbers seem stale**: Click the **Sync Now** button in the top nav, or press `Cmd + Shift + R` (hard refresh) to clear the cache
+2. **Dashboard is blurred**: You need to confirm the source files first. Review the file cards at the top and click "Confirm Current & Accurate" on each one
+3. **A location is "unmapped"**: The system couldn't match a ledger location name to a Glide budget entry. Let Jeffrey know and he'll update the mapping
+4. **A new file didn't process**: Check the Archives folder in Google Drive — if the file was moved there, it processed. If it's still in the original folder, click Sync Now or wait for the next 15-minute cycle
+5. **Episode totals don't match your spreadsheet**: The dashboard uses GL ledger data as the source of truth. Small rounding differences (pennies) are normal
 
 ---
 
