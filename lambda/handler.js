@@ -987,6 +987,91 @@ export async function handler(event, context) {
         result = { success: true, override, totalOverrides: overrides.length };
         console.log(`[Handler] Saved override for txId=${body.txId}, total: ${overrides.length}`);
       }
+    } else if (path.includes('/files/confirm') && method === 'POST') {
+      // Kirsten confirms a file as current and accurate
+      const confirmations = await readJsonFromS3('processed/file-confirmations.json')
+        .catch(() => ({ confirmations: [] }));
+      const list = confirmations.confirmations || [];
+
+      const entry = {
+        fileKey: body.fileKey,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: body.confirmedBy || 'kirsten'
+      };
+
+      // Upsert by fileKey
+      const idx = list.findIndex(c => c.fileKey === body.fileKey);
+      if (idx >= 0) {
+        list[idx] = entry;
+      } else {
+        list.push(entry);
+      }
+
+      await writeJsonToS3('processed/file-confirmations.json', {
+        confirmations: list,
+        updatedAt: new Date().toISOString()
+      });
+      result = { success: true, confirmation: entry, total: list.length };
+      console.log(`[Handler] File confirmed: ${body.fileKey}`);
+
+    } else if (path.includes('/files')) {
+      // Return processed file inventory with confirmation status
+      const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
+      const smartpo = await readJsonFromS3('processed/parsed-smartpo.json').catch(() => null);
+      const syncSummary = await readJsonFromS3('processed/latest-sync-summary.json').catch(() => null);
+      const confirmations = await readJsonFromS3('processed/file-confirmations.json')
+        .catch(() => ({ confirmations: [] }));
+      const confirmMap = {};
+      for (const c of confirmations.confirmations || []) {
+        confirmMap[c.fileKey] = c;
+      }
+
+      const files = [];
+
+      // Add ledger files
+      if (ledgers?.ledgers) {
+        for (const ledger of ledgers.ledgers) {
+          const txCount = (ledger.transactions || []).length;
+          const total = (ledger.transactions || []).reduce((s, t) => s + (t.amount || 0), 0);
+          const fileKey = `ledger-${ledger.filename}`;
+          files.push({
+            fileKey,
+            fileName: ledger.filename,
+            fileType: 'LEDGER',
+            episode: ledger.episode,
+            account: ledger.account,
+            reportDate: ledger.reportDate,
+            transactionCount: txCount,
+            totalAmount: total,
+            processedAt: ledger.parsedAt || syncSummary?.timestamp || null,
+            confirmation: confirmMap[fileKey] || null
+          });
+        }
+      }
+
+      // Add SmartPO file
+      if (smartpo) {
+        const poCount = smartpo.purchaseOrders?.length || 0;
+        const poTotal = (smartpo.purchaseOrders || []).reduce((s, p) => s + (p.amount || 0), 0);
+        const fileKey = `smartpo-${smartpo.filename || 'PO-Log'}`;
+        files.push({
+          fileKey,
+          fileName: smartpo.filename || 'PO-Log',
+          fileType: 'SMARTPO',
+          episode: 'all',
+          transactionCount: poCount,
+          totalAmount: poTotal,
+          processedAt: smartpo.parsedAt || syncSummary?.timestamp || null,
+          confirmation: confirmMap[fileKey] || null
+        });
+      }
+
+      result = {
+        files,
+        lastSync: syncSummary?.timestamp || null,
+        totalFiles: files.length
+      };
+
     } else if (path.includes('/ledgers') && !path.includes('/data')) {
       // Lightweight endpoint: return raw ledger data from S3
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
