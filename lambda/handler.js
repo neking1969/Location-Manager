@@ -1225,6 +1225,12 @@ export async function handler(event, context) {
           if (ledger.parsedAt && !byEpisode[ep].parsedAt) byEpisode[ep].parsedAt = ledger.parsedAt;
         }
         for (const [ep, info] of Object.entries(byEpisode)) {
+          // Fallback: derive reportDate from transaction data or parsedAt
+          if (!info.reportDate) {
+            const epLedger = ledgers.ledgers.find(l => (l.episode || 'unknown') === ep);
+            const txDate = epLedger?.transactions?.[0]?.reportDate;
+            info.reportDate = txDate || (info.parsedAt ? info.parsedAt.split('T')[0] : null);
+          }
           const fileKey = `ledger-ep${ep}`;
           files.push({
             fileKey,
