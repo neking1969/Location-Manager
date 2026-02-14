@@ -47,6 +47,7 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Archives |
 | **Sync Now Button** | ✅ Done | Triggers Make.com scenario on-demand from dashboard |
 | **File Confirmation Blur** | ✅ Done | Dashboard blurred until all source files confirmed |
+| **File Delete & Replace** | ✅ Done | Delete button on file cards, confirmation modal, removes data from S3 |
 | **PRODUCTION STATUS** | ✅ **READY** | All systems go! |
 
 ---
@@ -134,6 +135,8 @@ bash lambda/deploy.sh
 ---
 
 ## Recent Changes (2026-02-13)
+
+27. ✅ **File Delete & Replace** - Added delete button (trash icon) on each file card with confirmation modal. Clicking trash shows modal with file name, transaction count, amount, and episode. "Delete File" removes data from S3 (filters out ledger groups by episode, or clears SmartPO data), removes the confirmation entry, and removes the card from the UI. Cancel dismisses safely. After deleting, Kirsten drops the corrected file in Google Drive and clicks Sync Now. Files: `handler.js` (new `/files/delete` POST endpoint), `api/files/route.ts` (DELETE handler), `FileVerification.tsx` (DeleteConfirmModal component, delete state management, trash icons on cards).
 
 26. ✅ **File Confirmation Blur Overlay** - Dashboard content is blurred/dimmed/non-interactive on every page load until Kirsten confirms all source files are current and accurate. FileVerification component now exposes `onAllConfirmed` callback prop. Summary page wraps all content below file cards in a conditional blur container (`blur-sm opacity-40 pointer-events-none select-none`). Smooth 500ms transition when blur lifts. Resets on every page navigation. Files: `FileVerification.tsx` (callback prop), `summary/page.tsx` (blur wrapper + state).
 
@@ -271,6 +274,8 @@ bash lambda/deploy.sh
 31. **Make.com scenario trigger via REST API** - `POST https://us1.make.com/api/v2/scenarios/{id}/run` with `Authorization: Token {token}`. Works even for scheduled (non-webhook) scenarios. Returns `{executionId}`. Token stored as Lambda env var `MAKE_API_TOKEN`.
 32. **FileVerification callback pattern** - Pass `onAllConfirmed?: (confirmed: boolean) => void` to expose internal state to parent. Fires on initial load and after each confirmation. Used by summary page to control blur overlay.
 33. **Lambda env vars** - `GLIDE_APP_ID`, `GLIDE_API_KEY`, `MAKE_API_TOKEN`. Set via `aws lambda update-function-configuration --environment`.
+34. **File deletion is episode-scoped for ledgers** - `/files/delete` with `fileKey: "ledger-ep106"` removes ALL ledger groups for episode 106, recalculates totals. SmartPO deletion clears the entire PO dataset. Both also remove the file confirmation entry.
+35. **Next.js DELETE method for API routes** - Use `export async function DELETE(request: Request)` in route.ts. The Lambda endpoint is still POST (Lambda Function URLs don't differentiate HTTP methods well), so the Next.js DELETE handler proxies as POST to Lambda `/files/delete`.
 
 ---
 

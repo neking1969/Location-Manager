@@ -62,6 +62,16 @@ The dashboard is **blurred out** when you first open it. This is by design — y
 
 This happens every time you visit the dashboard, so you always verify the data is fresh.
 
+### Deleting a Wrong File
+
+If you uploaded the wrong file or need to replace one with a newer version:
+
+1. Click the **trash icon** (🗑) on the file card you want to remove
+2. A confirmation popup shows the file name, transaction count, and dollar amount
+3. Click **"Delete File"** to remove it, or **"Cancel"** to keep it
+4. The file's data is removed from the dashboard immediately
+5. Drop the corrected file into the Google Drive folder and click **Sync Now**
+
 ---
 
 ## Dashboard Pages (What They Show)
@@ -120,6 +130,7 @@ These are the key numbers from the current data (as of Feb 13, 2026):
 3. **A location is "unmapped"**: The system couldn't match a ledger location name to a Glide budget entry. Let Jeffrey know and he'll update the mapping
 4. **A new file didn't process**: Check the Archives folder in Google Drive — if the file was moved there, it processed. If it's still in the original folder, click Sync Now or wait for the next 15-minute cycle
 5. **Episode totals don't match your spreadsheet**: The dashboard uses GL ledger data as the source of truth. Small rounding differences (pennies) are normal
+6. **Wrong file was uploaded**: Click the trash icon on the file card → confirm deletion → drop the correct file into Google Drive → click Sync Now
 
 ---
 
