@@ -1448,27 +1448,37 @@ export async function handler(event, context) {
           body: JSON.stringify({ error: 'MAKE_API_TOKEN not configured' })
         };
       }
-      const scenarioId = 4560202;
-      console.log(`[Handler] Triggering Make.com scenario ${scenarioId}`);
-      const makeResp = await fetch(`https://us1.make.com/api/v2/scenarios/${scenarioId}/run`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Token ${makeToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ responsive: true })
-      });
-      const makeResult = await makeResp.json();
-      if (!makeResp.ok) {
-        console.error('[Handler] Make.com run failed:', makeResult);
+      const scenarioIds = [4560594, 4560595];
+      console.log(`[Handler] Triggering Make.com scenarios: ${scenarioIds.join(', ')}`);
+      const triggerResults = await Promise.allSettled(
+        scenarioIds.map(async (id) => {
+          const resp = await fetch(`https://us1.make.com/api/v2/scenarios/${id}/run`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Token ${makeToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ responsive: true })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            console.error(`[Handler] Make.com scenario ${id} failed:`, data);
+            return { scenarioId: id, success: false, error: data };
+          }
+          console.log(`[Handler] Make.com scenario ${id} triggered:`, data);
+          return { scenarioId: id, success: true, executionId: data.executionId };
+        })
+      );
+      const results = triggerResults.map((r, i) => r.status === 'fulfilled' ? r.value : { scenarioId: scenarioIds[i], success: false, error: r.reason?.message });
+      const allFailed = results.every(r => !r.success);
+      if (allFailed) {
         return {
-          statusCode: makeResp.status,
+          statusCode: 500,
           headers,
-          body: JSON.stringify({ error: 'Make.com scenario trigger failed', details: makeResult })
+          body: JSON.stringify({ error: 'All Make.com scenarios failed', details: results })
         };
       }
-      console.log('[Handler] Make.com scenario triggered:', makeResult);
-      result = { success: true, executionId: makeResult.executionId, scenarioId };
+      result = { success: true, scenarios: results };
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
     } else {
