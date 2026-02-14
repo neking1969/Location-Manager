@@ -10,13 +10,13 @@ Budget tracking and Glide synchronization for The Shards TV production.
 **Tell Claude one of these:**
 - "Test the end-to-end Weekly Sync workflow"
 - "Deploy the Location-Manager Lambda endpoint"
-- "Check the Make.com scenario status"
+- "Test the Google Drive sync"
 
 **Key URLs:**
 - Glide App: https://go.glideapps.com/app/TFowqRmlJ8sMhdap17C0
 - Glide Live: https://the-shards-season-1-fcmz.glide.page
-- Make.com Scenario: https://us1.make.com/300311/scenarios/4528779/edit
-- **Ledger Dashboard (ONLY External UI)**: https://main.d2nhaxprh2fg8e.amplifyapp.com
+- **Ledger Dashboard**: https://ledger.dglocations.com (custom domain)
+- Dashboard (old URL): https://main.d2nhaxprh2fg8e.amplifyapp.com
 
 ---
 
@@ -42,10 +42,12 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Vendor Location Map** | ✅ Done | Infers location from vendor history |
 | **Production Overhead** | ✅ Done | Categorizes uninferrable payroll/permits |
 | **Cloud-Only Architecture** | ✅ Done | Dashboard reads from Lambda/S3, no local files |
-| **Google Drive Auto-Sync** | ✅ **ACTIVE** | Scenarios #4560594 (Ledgers) + #4560595 (POs), polls every 15 min |
-| **Multipart File Upload** | ✅ Done | Lambda accepts multipart/form-data uploads |
-| **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Archives |
-| **Sync Now Button** | ✅ Done | Triggers Watch scenarios on-demand, checks for new files |
+| **Google Drive Direct Sync** | ✅ **ACTIVE** | Lambda scans Google Drive directly (no Make.com), EventBridge every 15 min |
+| **Multipart File Upload** | ✅ Done | Lambda accepts multipart/form-data uploads (legacy) |
+| **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Processed |
+| **Sync Now Button** | ✅ Done | Triggers direct Google Drive scan, downloads and processes files |
+| **Custom Domain** | ✅ **LIVE** | `ledger.dglocations.com` via Route 53 + Amplify |
+| **EventBridge Auto-Sync** | ✅ **ACTIVE** | `shards-ledger-auto-sync` rule fires every 15 min |
 | **File Deduplication** | ✅ Done | SHA256 hash prevents re-processing; cleared on file delete |
 | **SmartPO Independent Sync** | ✅ Done | PO files sync even without ledger in same session |
 | **File Confirmation Blur** | ✅ Done | Dashboard blurred until all source files confirmed |
@@ -66,27 +68,33 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | Vendors | `native-table-lmMcRP53QnXU3DnL6Byk` |
 | Sync Sessions | `native-table-03Yk3buCk0yZOF5dzh4i` |
 
-### Make.com
+### Google Drive Direct Sync (replaced Make.com on 2026-02-14)
 | Item | Value |
 |------|-------|
-| Weekly Sync Scenario ID | 4528779 |
-| Webhook URL | `https://hook.us1.make.com/k3snwjfpk65auz4wa49tiancqdla1d1o` |
-| **Ledger Watch Scenario** | **4560594** (watches Ledgers subfolder) |
-| **PO Watch Scenario** | **4560595** (watches POs subfolder) |
-| Auto-Sync Schedule | Every 15 minutes |
-| Old Auto-Sync Scenario | 4560202 (DEACTIVATED — watched parent folder, missed subfolders) |
-| Google Drive Connection | ID 1551176 (`jeffrey@enneking.company`) |
-| MAKE_API_TOKEN | Lambda env var for on-demand scenario triggers |
+| Service Account | `shards-sync@shards-ledger-sync.iam.gserviceaccount.com` |
+| GCP Project | `shards-ledger-sync` |
+| Auth Method | Service account JSON key, base64-encoded in Lambda env var `GOOGLE_SERVICE_ACCOUNT_KEY` |
+| Sync Method | Lambda directly calls Google Drive API (list, download, move) |
+| Auto-Sync | EventBridge rule `shards-ledger-auto-sync` every 15 min |
+| On-Demand | Sync Now button → Lambda `/trigger-sync` → scans Google Drive |
+| **Make.com DEACTIVATED** | Scenarios 4560594 + 4560595 no longer used (kept as backup) |
 
-### Google Drive Folders (Auto-Sync)
-| Folder | Google Drive ID |
-|--------|----------------|
-| AA_FOR BUDGET TRACKING WEBSITE | `1ccQn099wEk5V2w6WmgtExw66azkgQu4M` |
-| /Ledgers | `1ZWEcHz9oBYOm8gtXdxTJGFN8gzXWDgyn` |
-| /POs | `128JxBOum6mCt_XexA5dSGUKRiyU8xvsg` |
-| /Check Requests | `1jwsFJu-QsyVVbv52k25klMZ5kVjALCHu` |
-| /Invoices | `1barija6FSQ2POU4Mt9bhn3osFvZ6vdRY` |
-| /Archives | `1uHCPpgl7XG9_OZox60r6lhJbaw1x7Xg1` |
+### Google Drive Folders
+| Folder | Google Drive ID | Purpose |
+|--------|----------------|---------|
+| Ledgers | `1ZWEcHz9oBYOm8gtXdxTJGFN8gzXWDgyn` | Drop GL Ledger Excel files here |
+| POs | `128JxBOum6mCt_XexA5dSGUKRiyU8xvsg` | Drop SmartPO Excel files here |
+| Processed | `1uHCPpgl7XG9_OZox60r6lhJbaw1x7Xg1` | Files moved here after sync |
+| Check Requests | `1jwsFJu-QsyVVbv52k25klMZ5kVjALCHu` | Future use |
+| Invoices | `1barija6FSQ2POU4Mt9bhn3osFvZ6vdRY` | Future use |
+
+### Route 53 / Custom Domain
+| Item | Value |
+|------|-------|
+| Domain | `dglocations.com` (registered at GoDaddy, DNS on Route 53) |
+| Hosted Zone ID | `Z06569953HSJVZ2LIK2PK` |
+| Dashboard URL | `https://ledger.dglocations.com` |
+| Nameservers | `ns-405.awsdns-50.com`, `ns-1653.awsdns-14.co.uk`, `ns-1357.awsdns-41.org`, `ns-954.awsdns-55.net` |
 
 ### AWS Lambda (Main)
 | Item | Value |
@@ -122,8 +130,9 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | Item | Value |
 |------|-------|
 | **ONLY External UI** | **This is the ONLY UI (outside Glide) for this project** |
-| Dashboard URL | `https://main.d2nhaxprh2fg8e.amplifyapp.com` |
-| Comparison API | `https://main.d2nhaxprh2fg8e.amplifyapp.com/api/comparison` |
+| **Dashboard URL** | **`https://ledger.dglocations.com`** |
+| Dashboard URL (old) | `https://main.d2nhaxprh2fg8e.amplifyapp.com` |
+| Comparison API | `https://ledger.dglocations.com/api/comparison` |
 | GitHub Repo | `https://github.com/neking1969/Shards_Ledger` |
 | Amplify App ID | `d2nhaxprh2fg8e` |
 
@@ -139,6 +148,12 @@ bash lambda/deploy.sh
 ---
 
 ## Recent Changes (2026-02-14)
+
+40. ✅ **Custom Domain `ledger.dglocations.com`** - Set up Route 53 hosted zone for `dglocations.com` (Zone ID: `Z06569953HSJVZ2LIK2PK`). Added SSL verification CNAME + `ledger` subdomain CNAME pointing to Amplify CloudFront (`d1qsheztw8a1fg.cloudfront.net`). Changed GoDaddy nameservers to Route 53. Domain is live with HTTPS. All future DNS changes managed via AWS CLI.
+
+39. ✅ **Replaced Make.com with Direct Google Drive Sync** - Eliminated Make.com entirely. Lambda now scans Google Drive directly via service account (`shards-sync@shards-ledger-sync.iam.gserviceaccount.com`). Created GCP project `shards-ledger-sync`, enabled Drive API, shared 3 folders with service account. New flow: Lambda authenticates via JWT → lists files in Ledgers + POs folders → downloads each file → processes (dedup, parse, write to S3) → moves to Processed folder. Files: `src/utils/googleDrive.js` (new), `lambda/handler.js` (replaced `/trigger-sync`, added `performGoogleDriveSync()`, added EventBridge handler). Added `google-auth-library` dependency.
+
+38. ✅ **EventBridge 15-Minute Auto-Sync** - Created EventBridge rule `shards-ledger-auto-sync` (`rate(15 minutes)`) targeting Lambda `location-manager-sync`. Lambda detects EventBridge events via `event.source === 'aws.events'` and routes to same `performGoogleDriveSync()` function used by Sync Now button. Replaces Make.com's 15-min polling. Increased Lambda timeout from 60s → 120s for Google Drive operations.
 
 37. ✅ **Auto-Expand Location Cards from Dashboard** - Clicking a location in "Needs Attention" or "Awaiting Actuals" on the summary page now auto-expands the card on the locations page with smooth scroll-into-view, instead of just filtering the list. Uses existing `?expand=` URL parameter. Files: `summary/page.tsx` (added `&expand=` to link hrefs), `LocationGrid.tsx` (added `useRef` + `useEffect` for scroll-into-view, moved hooks before early returns). Deployed build #116.
 
@@ -301,7 +316,7 @@ bash lambda/deploy.sh
 30. **Make.com `listFiles` RPC always returns root** - The `folderId` parameter is ignored; it always lists root drive contents. Can't use this to browse specific folders.
 31. **Make.com scenario trigger via REST API** - `POST https://us1.make.com/api/v2/scenarios/{id}/run` with `Authorization: Token {token}`. Works even for scheduled (non-webhook) scenarios. Returns `{executionId}`. Token stored as Lambda env var `MAKE_API_TOKEN`.
 32. **FileVerification callback pattern** - Pass `onAllConfirmed?: (confirmed: boolean) => void` to expose internal state to parent. Fires on initial load and after each confirmation. Used by summary page to control blur overlay.
-33. **Lambda env vars** - `GLIDE_APP_ID`, `GLIDE_API_KEY`, `MAKE_API_TOKEN`. Set via `aws lambda update-function-configuration --environment`.
+33. **Lambda env vars** - `GLIDE_APP_ID`, `GLIDE_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_KEY` (base64), `GDRIVE_LEDGER_FOLDER_ID`, `GDRIVE_PO_FOLDER_ID`, `GDRIVE_PROCESSED_FOLDER_ID`, `AWS_S3_BUCKET`. Set via `aws lambda update-function-configuration --environment`.
 34. **File deletion is episode-scoped for ledgers** - `/files/delete` with `fileKey: "ledger-ep106"` removes ALL ledger groups for episode 106, recalculates totals. SmartPO deletion clears the entire PO dataset. Both also remove the file confirmation entry.
 35. **Next.js DELETE method for API routes** - Use `export async function DELETE(request: Request)` in route.ts. The Lambda endpoint is still POST (Lambda Function URLs don't differentiate HTTP methods well), so the Next.js DELETE handler proxies as POST to Lambda `/files/delete`.
 36. **Google Drive Watch module doesn't see subfolders** - `watchFilesInAFolder` only detects files DIRECTLY in the specified folder. Files in subfolders are invisible. Must create separate Watch scenarios for each subfolder.
@@ -310,31 +325,37 @@ bash lambda/deploy.sh
 39. **Make.com `searchForFilesFolders` + `getAFile` = broken** - When combining Search module output with the Download module, the internal `filterGoogleFileFormat` function crashes with `Cannot read properties of undefined (reading 'startsWith')`. Use Watch module (which works) or `makeApiCall` instead.
 40. **Make.com webhook creation requires data fields** - `gateway-webhook` hooks require `data: {headers: false, method: false, stringify: false, teamId: N}`. Without these, creation fails with validation error.
 41. **Dedup registry must be cleared on file delete** - When files are deleted from the dashboard, their SHA256 hash records in `processed-files-registry.json` must also be deleted, otherwise re-uploading the same file to Google Drive will be silently skipped.
+42. **Google Drive service account auth** - Use `google-auth-library` GoogleAuth with `credentials` (not keyFile) from base64-decoded JSON env var. Cache the auth instance. Scopes: `https://www.googleapis.com/auth/drive`.
+43. **Google Drive file move** - `PATCH /drive/v3/files/{id}?addParents={to}&removeParents={from}` moves a file between folders. Requires Editor access on both folders.
+44. **Google Sheets in Drive** - Files with `mimeType` starting with `application/vnd.google-apps.` need export, not direct download. Use `/files/{id}/export?mimeType=...` endpoint.
+45. **EventBridge → Lambda** - EventBridge events have `event.source === 'aws.events'` and `event['detail-type'] === 'Scheduled Event'`. No `httpMethod`, `path`, or `body`. Handle before HTTP routing.
+46. **Route 53 for GoDaddy domains** - Create hosted zone, add DNS records via CLI, then change GoDaddy nameservers to Route 53's NS records (one-time manual step). All future DNS managed programmatically.
+47. **Make.com eliminated** - Direct Google Drive API is faster, cheaper, and more reliable than Make.com polling. No more Make.com monthly cost or failure point.
 
 ---
 
-## Architecture (Cloud-Only)
+## Architecture (Cloud-Only, No Make.com)
 
 ```
-Glide App (data entry)
-  ↓ webhook
-Make.com (relay)
-  ↓ HTTP POST
-Lambda: location-manager-sync (processing ~4s)
-  ↓ writes to S3
+Kirsten drops files into Google Drive (Ledgers/ or POs/ folder)
+  ↓
+EventBridge (every 15 min) OR Sync Now button
+  ↓ triggers
+Lambda: location-manager-sync → Google Drive API (service account auth)
+  ↓ lists files, downloads, processes, moves to Processed/
 S3 Bucket: location-manager-prod/
   ├── processed/parsed-ledgers-detailed.json  (ledger transactions)
   ├── processed/latest-sync-summary.json       (sync metadata)
   └── static/parsed-budgets.json               (budget data)
-  ↓ reads via /data endpoint
+  ↓ reads via /data endpoint (fresh Glide budgets + S3 actuals)
 Lambda: location-manager-sync
-  ↓ serves JSON with comparison
-Amplify: Shards-Ledger-App /api/comparison
+  ↓ serves JSON with location comparison
+Amplify: Shards-Ledger-App
   ↓ caches (60s) & serves
-Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
+Dashboard UI: https://ledger.dglocations.com
 ```
 
-**Key Point**: The dashboard works entirely from AWS. No local files required.
+**Key Point**: No Make.com. Lambda talks directly to Google Drive API via service account. EventBridge handles scheduling.
 
 ---
 
