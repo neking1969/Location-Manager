@@ -1085,6 +1085,77 @@ export async function handler(event, context) {
       result = { success: true, confirmation: entry, total: list.length };
       console.log(`[Handler] File confirmed: ${body.fileKey}`);
 
+    } else if (path.includes('/files/delete') && method === 'POST') {
+      const fileKey = body.fileKey;
+      if (!fileKey) {
+        result = { error: 'fileKey is required' };
+        statusCode = 400;
+      } else {
+        console.log(`[Handler] Deleting file: ${fileKey}`);
+        let deletedTxCount = 0;
+        let deletedAmount = 0;
+
+        if (fileKey.startsWith('ledger-ep')) {
+          const episode = fileKey.replace('ledger-ep', '');
+          const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
+
+          if (ledgers?.ledgers) {
+            const before = ledgers.ledgers.length;
+            const kept = ledgers.ledgers.filter(l => {
+              const ep = l.episode || 'unknown';
+              if (ep === episode) {
+                deletedTxCount += (l.transactions || []).length;
+                deletedAmount += (l.transactions || []).reduce((s, t) => s + (t.amount || 0), 0);
+                return false;
+              }
+              return true;
+            });
+
+            await writeJsonToS3('processed/parsed-ledgers-detailed.json', {
+              ...ledgers,
+              ledgers: kept,
+              totalFiles: kept.length,
+              totalLineItems: kept.reduce((s, l) => s + (l.transactions || []).length, 0),
+              grandTotal: kept.reduce((s, l) => s + (l.transactions || []).reduce((s2, t) => s2 + (t.amount || 0), 0), 0),
+              lastUpdated: new Date().toISOString()
+            });
+            console.log(`[Handler] Removed ${before - kept.length} ledger groups for episode ${episode} (${deletedTxCount} txns, $${deletedAmount.toFixed(2)})`);
+          }
+        } else if (fileKey.startsWith('smartpo-')) {
+          const smartpo = await readJsonFromS3('processed/parsed-smartpo.json').catch(() => null);
+          if (smartpo) {
+            deletedTxCount = smartpo.purchaseOrders?.length || 0;
+            deletedAmount = (smartpo.purchaseOrders || []).reduce((s, p) => s + (p.amount || 0), 0);
+            await writeJsonToS3('processed/parsed-smartpo.json', {
+              purchaseOrders: [],
+              totalPOs: 0,
+              totalAmount: 0,
+              filename: null,
+              parsedAt: null,
+              deletedAt: new Date().toISOString()
+            });
+            console.log(`[Handler] Cleared SmartPO data (${deletedTxCount} POs, $${deletedAmount.toFixed(2)})`);
+          }
+        }
+
+        const confirmations = await readJsonFromS3('processed/file-confirmations.json')
+          .catch(() => ({ confirmations: [] }));
+        const filteredConfirmations = (confirmations.confirmations || []).filter(c => c.fileKey !== fileKey);
+        await writeJsonToS3('processed/file-confirmations.json', {
+          confirmations: filteredConfirmations,
+          updatedAt: new Date().toISOString()
+        });
+
+        result = {
+          success: true,
+          deletedFileKey: fileKey,
+          deletedTransactions: deletedTxCount,
+          deletedAmount,
+          message: `Removed ${deletedTxCount} transactions ($${Math.abs(deletedAmount).toLocaleString()})`
+        };
+        console.log(`[Handler] File deleted: ${fileKey} — ${deletedTxCount} txns, $${deletedAmount.toFixed(2)}`);
+      }
+
     } else if (path.includes('/files')) {
       // Return processed file inventory with confirmation status
       const ledgers = await readJsonFromS3('processed/parsed-ledgers-detailed.json').catch(() => null);
