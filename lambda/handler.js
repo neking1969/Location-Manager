@@ -8,6 +8,7 @@ import { createGlideClient } from '../src/glide/client.js';
 import { transformBudgetData } from '../src/parsers/budget.js';
 import { generateFileHash, checkFileProcessed, markFileProcessed, classifyFileType } from '../src/utils/fileDeduplication.js';
 import { parseMultipart, extractBoundary } from '../src/utils/parseMultipart.js';
+import { getAuth, scanAndDownloadNewFiles, moveFile } from '../src/utils/googleDrive.js';
 
 const ALL_CATEGORIES = [
   'Loc Fees', 'Addl. Site Fees', 'Site Personnel', 'Permits',
@@ -721,6 +722,183 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   };
 }
 
+async function performGoogleDriveSync() {
+  const ledgerFolderId = process.env.GDRIVE_LEDGER_FOLDER_ID;
+  const poFolderId = process.env.GDRIVE_PO_FOLDER_ID;
+  const processedFolderId = process.env.GDRIVE_PROCESSED_FOLDER_ID;
+
+  if (!ledgerFolderId || !poFolderId || !processedFolderId) {
+    throw new Error('Google Drive folder IDs not configured (GDRIVE_LEDGER_FOLDER_ID, GDRIVE_PO_FOLDER_ID, GDRIVE_PROCESSED_FOLDER_ID)');
+  }
+
+  const auth = await getAuth();
+  console.log('[GDriveSync] Authenticated with Google Drive');
+
+  const [ledgerFiles, poFiles] = await Promise.all([
+    scanAndDownloadNewFiles(auth, ledgerFolderId, 'Ledgers'),
+    scanAndDownloadNewFiles(auth, poFolderId, 'POs')
+  ]);
+
+  const totalFound = ledgerFiles.length + poFiles.length;
+  if (totalFound === 0) {
+    return { success: true, message: 'No new files found in Google Drive', filesProcessed: 0, filesSkipped: 0 };
+  }
+
+  console.log(`[GDriveSync] Found ${ledgerFiles.length} ledger files, ${poFiles.length} PO files`);
+
+  const processedFiles = [];
+  const skippedDuplicates = [];
+  const movedFiles = [];
+
+  for (const file of ledgerFiles) {
+    const fileHash = generateFileHash(file.buffer);
+    const dedupCheck = await checkFileProcessed(fileHash, file.filename);
+    if (dedupCheck.isDuplicate) {
+      console.log(`[GDriveSync] SKIPPED duplicate: ${file.filename}`);
+      skippedDuplicates.push({ fileName: file.filename, previousSync: dedupCheck.previousSync });
+      await moveFile(auth, file.driveFileId, ledgerFolderId, processedFolderId).catch(e =>
+        console.warn(`[GDriveSync] Failed to move ${file.filename} to processed: ${e.message}`)
+      );
+      movedFiles.push(file.filename);
+      continue;
+    }
+
+    const detectedType = classifyFileType(file.filename, 'Ledgers');
+    console.log(`[GDriveSync] Processing ledger: ${file.filename} as ${detectedType}`);
+
+    const syncInput = {
+      ledgerFiles: detectedType === 'LEDGER' ? [{ filename: file.filename, buffer: file.buffer }] : [],
+      smartpoFile: detectedType === 'SMARTPO' ? { filename: file.filename, buffer: file.buffer } : undefined,
+      options: {}
+    };
+
+    try {
+      const s3Mappings = await readJsonFromS3('config/location-mappings.json');
+      syncInput.locationMappings = s3Mappings;
+    } catch (e) {
+      syncInput.locationMappings = { mappings: [] };
+    }
+
+    if (syncInput.ledgerFiles.length > 0 || syncInput.smartpoFile) {
+      const result = await handleSync(syncInput);
+
+      if (result.success && result.ledgers) {
+        await writeProcessedLedger(result, {
+          syncSessionId: Date.now().toString(),
+          sessionName: 'google-drive-auto'
+        }, {
+          ledgerFiles: syncInput.ledgerFiles,
+          smartpoBuffer: syncInput.smartpoFile?.buffer,
+          smartpoFilename: syncInput.smartpoFile?.filename
+        });
+      }
+
+      if (result.success && !result.ledgers && result.smartpo?.purchaseOrders?.length > 0) {
+        await writeJsonToS3('processed/parsed-smartpo.json', {
+          purchaseOrders: result.smartpo.purchaseOrders,
+          totalPOs: result.smartpo.totalPOs || result.smartpo.purchaseOrders.length,
+          totalAmount: result.smartpo.totalAmount || 0,
+          byStatus: result.smartpo.byStatus || {},
+          lastUpdated: new Date().toISOString()
+        });
+      }
+
+      if (result.success) {
+        await markFileProcessed(fileHash, file.filename, {
+          syncSource: 'google-drive-auto',
+          fileType: detectedType,
+          syncSessionId: Date.now().toString()
+        });
+        processedFiles.push({ fileName: file.filename, fileType: detectedType, status: 'processed' });
+      }
+
+      if (result.success && result.budgetData) {
+        await writeJsonToS3('static/parsed-budgets.json', result.budgetData);
+      }
+    }
+
+    await moveFile(auth, file.driveFileId, ledgerFolderId, processedFolderId).catch(e =>
+      console.warn(`[GDriveSync] Failed to move ${file.filename} to processed: ${e.message}`)
+    );
+    movedFiles.push(file.filename);
+  }
+
+  for (const file of poFiles) {
+    const fileHash = generateFileHash(file.buffer);
+    const dedupCheck = await checkFileProcessed(fileHash, file.filename);
+    if (dedupCheck.isDuplicate) {
+      console.log(`[GDriveSync] SKIPPED duplicate PO: ${file.filename}`);
+      skippedDuplicates.push({ fileName: file.filename, previousSync: dedupCheck.previousSync });
+      await moveFile(auth, file.driveFileId, poFolderId, processedFolderId).catch(e =>
+        console.warn(`[GDriveSync] Failed to move ${file.filename} to processed: ${e.message}`)
+      );
+      movedFiles.push(file.filename);
+      continue;
+    }
+
+    console.log(`[GDriveSync] Processing PO file: ${file.filename}`);
+
+    const syncInput = {
+      ledgerFiles: [],
+      smartpoFile: { filename: file.filename, buffer: file.buffer },
+      options: {}
+    };
+
+    try {
+      const s3Mappings = await readJsonFromS3('config/location-mappings.json');
+      syncInput.locationMappings = s3Mappings;
+    } catch (e) {
+      syncInput.locationMappings = { mappings: [] };
+    }
+
+    const result = await handleSync(syncInput);
+
+    if (result.success && result.smartpo?.purchaseOrders?.length > 0) {
+      await writeJsonToS3('processed/parsed-smartpo.json', {
+        purchaseOrders: result.smartpo.purchaseOrders,
+        totalPOs: result.smartpo.totalPOs || result.smartpo.purchaseOrders.length,
+        totalAmount: result.smartpo.totalAmount || 0,
+        byStatus: result.smartpo.byStatus || {},
+        lastUpdated: new Date().toISOString()
+      });
+    }
+
+    if (result.success) {
+      await markFileProcessed(fileHash, file.filename, {
+        syncSource: 'google-drive-auto',
+        fileType: 'SMARTPO',
+        syncSessionId: Date.now().toString()
+      });
+      processedFiles.push({ fileName: file.filename, fileType: 'SMARTPO', status: 'processed' });
+    }
+
+    await moveFile(auth, file.driveFileId, poFolderId, processedFolderId).catch(e =>
+      console.warn(`[GDriveSync] Failed to move ${file.filename} to processed: ${e.message}`)
+    );
+    movedFiles.push(file.filename);
+  }
+
+  if (processedFiles.length > 0) {
+    await writeJsonToS3('processed/latest-sync-summary.json', {
+      timestamp: new Date().toISOString(),
+      syncSource: 'google-drive-auto',
+      sessionId: Date.now().toString(),
+      filesProcessed: processedFiles,
+      filesDuplicated: skippedDuplicates,
+      filesMoved: movedFiles
+    });
+  }
+
+  return {
+    success: true,
+    message: `Processed ${processedFiles.length} files, skipped ${skippedDuplicates.length} duplicates, moved ${movedFiles.length} to processed`,
+    filesProcessed: processedFiles.length,
+    filesSkipped: skippedDuplicates.length,
+    filesMoved: movedFiles.length,
+    details: { processedFiles, skippedDuplicates, movedFiles }
+  };
+}
+
 export async function handler(event, context) {
   const headers = {
     'Content-Type': 'application/json',
@@ -728,6 +906,19 @@ export async function handler(event, context) {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
+
+  // Handle EventBridge scheduled events (automatic 15-min sync)
+  if (event.source === 'aws.events' || event['detail-type'] === 'Scheduled Event') {
+    console.log('[Handler] EventBridge scheduled sync triggered');
+    try {
+      const result = await performGoogleDriveSync();
+      console.log('[Handler] EventBridge sync complete:', JSON.stringify(result));
+      return { statusCode: 200, body: JSON.stringify(result) };
+    } catch (error) {
+      console.error('[Handler] EventBridge sync error:', error);
+      return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    }
+  }
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
@@ -858,7 +1049,7 @@ export async function handler(event, context) {
         console.log(`[Handler] Processed ${processedFiles.length} files, skipped ${skippedDuplicates.length} duplicates`);
       }
 
-      // Handle multipart file uploads (from Make.com Google Drive auto-sync)
+      // Handle multipart file uploads (legacy support)
       if (uploadedFiles.length > 0 && !syncInput.ledgerFiles?.length) {
         console.log(`[Handler] Processing ${uploadedFiles.length} multipart-uploaded file(s)...`);
         syncInput.ledgerFiles = syncInput.ledgerFiles || [];
@@ -1486,48 +1677,17 @@ export async function handler(event, context) {
         }
       }
     } else if (path.includes('/trigger-sync') && method === 'POST') {
-      const makeToken = process.env.MAKE_API_TOKEN;
-      if (!makeToken) {
+      console.log('[Handler] Manual sync triggered via Sync Now button');
+      try {
+        result = await performGoogleDriveSync();
+      } catch (syncError) {
+        console.error('[Handler] Google Drive sync failed:', syncError);
         return {
           statusCode: 500,
           headers,
-          body: JSON.stringify({ error: 'MAKE_API_TOKEN not configured' })
+          body: JSON.stringify({ error: `Google Drive sync failed: ${syncError.message}` })
         };
       }
-      const scenarios = [
-        { id: 4560594, name: 'Ledger Folder Sync' },
-        { id: 4560595, name: 'PO Folder Sync' }
-      ];
-      console.log(`[Handler] Triggering ${scenarios.length} Make.com Watch scenarios`);
-      const triggerResults = await Promise.allSettled(
-        scenarios.map(async (sc) => {
-          const resp = await fetch(`https://us1.make.com/api/v2/scenarios/${sc.id}/run`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Token ${makeToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ responsive: true })
-          });
-          const data = await resp.json();
-          if (!resp.ok) {
-            console.error(`[Handler] ${sc.name} (${sc.id}) failed:`, data);
-            return { name: sc.name, scenarioId: sc.id, success: false, error: data };
-          }
-          console.log(`[Handler] ${sc.name} (${sc.id}) triggered:`, data);
-          return { name: sc.name, scenarioId: sc.id, success: true, executionId: data.executionId };
-        })
-      );
-      const results = triggerResults.map((r, i) => r.status === 'fulfilled' ? r.value : { name: scenarios[i].name, scenarioId: scenarios[i].id, success: false, error: r.reason?.message });
-      const allFailed = results.every(r => !r.success);
-      if (allFailed) {
-        return {
-          statusCode: 500,
-          headers,
-          body: JSON.stringify({ error: 'All Make.com scenarios failed', details: results })
-        };
-      }
-      result = { success: true, message: 'Sync triggered - checking for new files in Google Drive', scenarios: results };
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
     } else {

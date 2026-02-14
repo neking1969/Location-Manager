@@ -5,7 +5,7 @@ FUNCTION_NAME="location-manager-sync"
 REGION="us-west-2"
 RUNTIME="nodejs20.x"
 HANDLER="lambda/handler.handler"
-TIMEOUT=60
+TIMEOUT=120
 MEMORY=512
 
 cd "$(dirname "$0")/.."
