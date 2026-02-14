@@ -42,10 +42,12 @@ Budget tracking and Glide synchronization for The Shards TV production.
 | **Vendor Location Map** | ✅ Done | Infers location from vendor history |
 | **Production Overhead** | ✅ Done | Categorizes uninferrable payroll/permits |
 | **Cloud-Only Architecture** | ✅ Done | Dashboard reads from Lambda/S3, no local files |
-| **Google Drive Auto-Sync** | ✅ **ACTIVE** | Scenario #4560202, polls every 15 min |
+| **Google Drive Auto-Sync** | ✅ **ACTIVE** | Scenarios #4560594 (Ledgers) + #4560595 (POs), polls every 15 min |
 | **Multipart File Upload** | ✅ Done | Lambda accepts multipart/form-data uploads |
 | **Google Drive Folders** | ✅ Created | Ledgers, POs, Invoices, Check Requests, Archives |
-| **Sync Now Button** | ✅ Done | Triggers Make.com scenario on-demand from dashboard |
+| **Sync Now Button** | ✅ Done | Triggers Watch scenarios on-demand, checks for new files |
+| **File Deduplication** | ✅ Done | SHA256 hash prevents re-processing; cleared on file delete |
+| **SmartPO Independent Sync** | ✅ Done | PO files sync even without ledger in same session |
 | **File Confirmation Blur** | ✅ Done | Dashboard blurred until all source files confirmed |
 | **File Delete & Replace** | ✅ Done | Delete button on file cards, confirmation modal, removes data from S3 |
 | **PRODUCTION STATUS** | ✅ **READY** | All systems go! |
@@ -69,10 +71,12 @@ Budget tracking and Glide synchronization for The Shards TV production.
 |------|-------|
 | Weekly Sync Scenario ID | 4528779 |
 | Webhook URL | `https://hook.us1.make.com/k3snwjfpk65auz4wa49tiancqdla1d1o` |
-| **Auto-Sync Scenario ID** | **4560202** |
+| **Ledger Watch Scenario** | **4560594** (watches Ledgers subfolder) |
+| **PO Watch Scenario** | **4560595** (watches POs subfolder) |
 | Auto-Sync Schedule | Every 15 minutes |
-| Auto-Sync URL | `https://us1.make.com/300311/scenarios/4560202/edit` |
+| Old Auto-Sync Scenario | 4560202 (DEACTIVATED — watched parent folder, missed subfolders) |
 | Google Drive Connection | ID 1551176 (`jeffrey@enneking.company`) |
+| MAKE_API_TOKEN | Lambda env var for on-demand scenario triggers |
 
 ### Google Drive Folders (Auto-Sync)
 | Folder | Google Drive ID |
@@ -131,6 +135,20 @@ Budget tracking and Glide synchronization for The Shards TV production.
 cd ~/Projects/Location-Manager
 bash lambda/deploy.sh
 ```
+
+---
+
+## Recent Changes (2026-02-14)
+
+32. ✅ **Sync Now Button Fix (Complete)** - Fixed Sync Now button to reliably sync files from Google Drive. Root cause: old scenario #4560202 watched the PARENT folder `AA_FOR BUDGET TRACKING WEBSITE`, but files are in SUBFOLDERS (`/Ledgers/` and `/POs/`). Google Drive Watch module doesn't see files in subfolders. Fix: Created 2 new Watch scenarios (#4560594 for Ledgers, #4560595 for POs) that each watch the correct subfolder. Lambda `/trigger-sync` triggers both via REST API (`POST /api/v2/scenarios/{id}/run`). Auto-sync runs every 15 min; Sync Now button triggers immediately. File: `handler.js` (trigger-sync endpoint).
+
+31. ✅ **File Dedup Clearing on Delete** - When files are deleted from dashboard, dedup records in `processed-files-registry.json` are now cleared so the same file can be re-synced from Google Drive. Matches by episode number (for ledgers) or filename prefix (for SmartPOs). File: `handler.js` (`/files/delete` handler).
+
+30. ✅ **SmartPO Independent Write** - Fixed bug where SmartPO data wasn't persisted when synced without a ledger file. The S3 write path was gated on `result.ledgers` being non-null. Added independent SmartPO write block that writes to `processed/parsed-smartpo.json` when PO data is present but no ledger. File: `handler.js`.
+
+29. ✅ **Feb 13 Ledger Files Synced** - Manually synced 4 new ledger files from accountant (episodes 101, 104, 105, 106 dated 02/13/26). Dashboard now shows: Budget $7,316,027, Actual $6,447,727.59, Variance $868,299.41. 43/50 locations with actuals, 13 over budget. 215 POs ($1,787,703.92).
+
+28. ✅ **Dedup Marking Fix** - Moved dedup `markFileProcessed()` call outside of `result.ledgers` block so ALL file types (not just ledgers) get registered in the dedup registry. File: `handler.js`.
 
 ---
 
@@ -276,6 +294,12 @@ bash lambda/deploy.sh
 33. **Lambda env vars** - `GLIDE_APP_ID`, `GLIDE_API_KEY`, `MAKE_API_TOKEN`. Set via `aws lambda update-function-configuration --environment`.
 34. **File deletion is episode-scoped for ledgers** - `/files/delete` with `fileKey: "ledger-ep106"` removes ALL ledger groups for episode 106, recalculates totals. SmartPO deletion clears the entire PO dataset. Both also remove the file confirmation entry.
 35. **Next.js DELETE method for API routes** - Use `export async function DELETE(request: Request)` in route.ts. The Lambda endpoint is still POST (Lambda Function URLs don't differentiate HTTP methods well), so the Next.js DELETE handler proxies as POST to Lambda `/files/delete`.
+36. **Google Drive Watch module doesn't see subfolders** - `watchFilesInAFolder` only detects files DIRECTLY in the specified folder. Files in subfolders are invisible. Must create separate Watch scenarios for each subfolder.
+37. **Watch cursor starts at activation time** - Files uploaded BEFORE a Watch scenario is activated are invisible to the Watch module. Only files uploaded AFTER activation are caught. Use manual sync (curl to Lambda) for pre-existing files.
+38. **Google Drive folder ownership vs access** - Files are in `modernlocations@gmail.com` drive, but Make.com connection #1551176 uses `jeffrey@enneking.company`. Works because the folder is shared. Both accounts can see files via the same folder IDs.
+39. **Make.com `searchForFilesFolders` + `getAFile` = broken** - When combining Search module output with the Download module, the internal `filterGoogleFileFormat` function crashes with `Cannot read properties of undefined (reading 'startsWith')`. Use Watch module (which works) or `makeApiCall` instead.
+40. **Make.com webhook creation requires data fields** - `gateway-webhook` hooks require `data: {headers: false, method: false, stringify: false, teamId: N}`. Without these, creation fails with validation error.
+41. **Dedup registry must be cleared on file delete** - When files are deleted from the dashboard, their SHA256 hash records in `processed-files-registry.json` must also be deleted, otherwise re-uploading the same file to Google Drive will be silently skipped.
 
 ---
 
@@ -304,9 +328,19 @@ Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
 
 ---
 
-## Reconciliation Reference (2026-02-13)
+## Reconciliation Reference (2026-02-14)
 
-### Verified Totals (all match within pennies)
+### Latest Dashboard State (Feb 13 ledger files)
+| Metric | Value |
+|--------|-------|
+| Budget | $7,316,027.00 |
+| Actual | $6,447,727.59 |
+| Variance | $868,299.41 |
+| Locations with actuals | 43/50 |
+| Locations over budget | 13 |
+| Purchase Orders | 215 ($1,787,703.92), 209 open |
+
+### Previous Verified Totals (Feb 6 ledger files)
 | Source | Total |
 |--------|-------|
 | Raw GL ledger files (4 files, 02/06/26) | $6,413,088.32 |
@@ -314,19 +348,11 @@ Dashboard UI: https://main.d2nhaxprh2fg8e.amplifyapp.com
 | Lambda /data endpoint | $6,413,088.32 |
 | Kirsten's email (Feb 10) | $6,413,088.23 |
 
-### Per-Episode Actuals
-| Episode | Dashboard | Kirsten | Status |
-|---------|----------|---------|--------|
-| 101+102 | $4,203,200.53 | $4,203,200.50 | MATCH |
-| 104 | $1,389,830.66 | $1,389,830.60 | MATCH |
-| 105 | $745,323.33 | $745,323.33 | MATCH |
-| 106 | $74,733.80 | $74,733.80 | MATCH |
-
-### Dashboard Breakdown (after all fixes)
+### Dashboard Breakdown
 - Budgeted locations: 50 locations matched to Glide budgets
 - Unmapped locations: 65 total = 41 pending + 24 service_charge + 0 unknown
-- No-location: 1,061 txns / $657,337 (mostly Police/Site Personnel payroll)
-- Ep 105 categories: All 10 populated (was $0 across the board)
+- No-location: ~1,061 txns (mostly Police/Site Personnel payroll)
+- Ep 105 categories: All 10 populated
 
 ### Known Open Items
 1. **Ep 105 budget discrepancy** - Kirsten=$840,390, Glide=$821,355 (diff $19,035). This is a **Glide data issue** — `totalFromMake` values in Glide sum to $821K, not $840K. Code is correct. Needs manual audit of Ep 105 location budgets in Glide vs Kirsten's spreadsheet.
