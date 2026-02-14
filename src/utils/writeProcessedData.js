@@ -33,6 +33,19 @@ function mergeLedgers(existingLedgers, newLedgers) {
     }
   }
 
+  // Build metadata lookup from source ledgers (filename, reportDate, parsedAt)
+  const metadataByEpisode = new Map();
+  for (const ledger of [...newLedgers, ...existingLedgers]) {
+    const ep = ledger.episode || 'unknown';
+    if (!metadataByEpisode.has(ep) || ledger.filename) {
+      metadataByEpisode.set(ep, {
+        filename: ledger.filename,
+        reportDate: ledger.reportDate,
+        parsedAt: ledger.parsedAt,
+      });
+    }
+  }
+
   // Step 2: Rebuild ledger structure by grouping transactions by episode-account
   const ledgerMap = new Map(); // Map<"episode-account", ledger>
 
@@ -42,10 +55,13 @@ function mergeLedgers(existingLedgers, newLedgers) {
     const key = `${episode}-${account}`;
 
     if (!ledgerMap.has(key)) {
-      // Create new ledger structure
+      const meta = metadataByEpisode.get(episode) || {};
       ledgerMap.set(key, {
         episode,
         account,
+        filename: meta.filename,
+        reportDate: meta.reportDate,
+        parsedAt: meta.parsedAt,
         transactions: [],
         transactionCount: 0
       });

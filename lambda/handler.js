@@ -1099,22 +1099,31 @@ export async function handler(event, context) {
 
       const files = [];
 
-      // Add ledger files
+      // Add ledger files — group by episode (one card per source file)
       if (ledgers?.ledgers) {
+        const byEpisode = {};
         for (const ledger of ledgers.ledgers) {
-          const txCount = (ledger.transactions || []).length;
-          const total = (ledger.transactions || []).reduce((s, t) => s + (t.amount || 0), 0);
-          const fileKey = `ledger-${ledger.filename}`;
+          const ep = ledger.episode || 'unknown';
+          if (!byEpisode[ep]) {
+            byEpisode[ep] = { txCount: 0, total: 0, filename: ledger.filename, reportDate: ledger.reportDate, parsedAt: ledger.parsedAt };
+          }
+          byEpisode[ep].txCount += (ledger.transactions || []).length;
+          byEpisode[ep].total += (ledger.transactions || []).reduce((s, t) => s + (t.amount || 0), 0);
+          if (ledger.filename && !byEpisode[ep].filename) byEpisode[ep].filename = ledger.filename;
+          if (ledger.reportDate && !byEpisode[ep].reportDate) byEpisode[ep].reportDate = ledger.reportDate;
+          if (ledger.parsedAt && !byEpisode[ep].parsedAt) byEpisode[ep].parsedAt = ledger.parsedAt;
+        }
+        for (const [ep, info] of Object.entries(byEpisode)) {
+          const fileKey = `ledger-ep${ep}`;
           files.push({
             fileKey,
-            fileName: ledger.filename,
+            fileName: info.filename || `Episode ${ep} GL Ledger`,
             fileType: 'LEDGER',
-            episode: ledger.episode,
-            account: ledger.account,
-            reportDate: ledger.reportDate,
-            transactionCount: txCount,
-            totalAmount: total,
-            processedAt: ledger.parsedAt || syncSummary?.timestamp || null,
+            episode: ep,
+            reportDate: info.reportDate,
+            transactionCount: info.txCount,
+            totalAmount: info.total,
+            processedAt: info.parsedAt || syncSummary?.timestamp || null,
             confirmation: confirmMap[fileKey] || null
           });
         }
