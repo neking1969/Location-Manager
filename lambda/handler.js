@@ -1488,11 +1488,14 @@ export async function handler(event, context) {
           body: JSON.stringify({ error: 'MAKE_API_TOKEN not configured' })
         };
       }
-      const scenarioIds = [4560594, 4560595];
-      console.log(`[Handler] Triggering Make.com scenarios: ${scenarioIds.join(', ')}`);
+      const scenarios = [
+        { id: 4560594, name: 'Ledger Folder Sync' },
+        { id: 4560595, name: 'PO Folder Sync' }
+      ];
+      console.log(`[Handler] Triggering ${scenarios.length} Make.com Watch scenarios`);
       const triggerResults = await Promise.allSettled(
-        scenarioIds.map(async (id) => {
-          const resp = await fetch(`https://us1.make.com/api/v2/scenarios/${id}/run`, {
+        scenarios.map(async (sc) => {
+          const resp = await fetch(`https://us1.make.com/api/v2/scenarios/${sc.id}/run`, {
             method: 'POST',
             headers: {
               'Authorization': `Token ${makeToken}`,
@@ -1502,14 +1505,14 @@ export async function handler(event, context) {
           });
           const data = await resp.json();
           if (!resp.ok) {
-            console.error(`[Handler] Make.com scenario ${id} failed:`, data);
-            return { scenarioId: id, success: false, error: data };
+            console.error(`[Handler] ${sc.name} (${sc.id}) failed:`, data);
+            return { name: sc.name, scenarioId: sc.id, success: false, error: data };
           }
-          console.log(`[Handler] Make.com scenario ${id} triggered:`, data);
-          return { scenarioId: id, success: true, executionId: data.executionId };
+          console.log(`[Handler] ${sc.name} (${sc.id}) triggered:`, data);
+          return { name: sc.name, scenarioId: sc.id, success: true, executionId: data.executionId };
         })
       );
-      const results = triggerResults.map((r, i) => r.status === 'fulfilled' ? r.value : { scenarioId: scenarioIds[i], success: false, error: r.reason?.message });
+      const results = triggerResults.map((r, i) => r.status === 'fulfilled' ? r.value : { name: scenarios[i].name, scenarioId: scenarios[i].id, success: false, error: r.reason?.message });
       const allFailed = results.every(r => !r.success);
       if (allFailed) {
         return {
@@ -1518,7 +1521,7 @@ export async function handler(event, context) {
           body: JSON.stringify({ error: 'All Make.com scenarios failed', details: results })
         };
       }
-      result = { success: true, scenarios: results };
+      result = { success: true, message: 'Sync triggered - checking for new files in Google Drive', scenarios: results };
     } else if (path.includes('/health')) {
       result = { status: 'ok', timestamp: new Date().toISOString() };
     } else {
