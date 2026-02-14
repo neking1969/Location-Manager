@@ -140,6 +140,10 @@ bash lambda/deploy.sh
 
 ## Recent Changes (2026-02-14)
 
+34. ✅ **PO Number Display Fix (Dashboard)** - Fixed `locations-budget/route.ts` in Shards_Ledger dashboard (commit `aaadb53`, build #114). The `transformLocation()` function was hardcoding `transType: "AP"` and dropping `poNumber`, `documentNumber`, and `effectiveDate` from Lambda response. Now all 4 fields pass through correctly. Effect: PO# and Doc# columns show actual PO numbers (e.g., `1WZX0334`), transaction tabs correctly split POs/Invoices/Checks/Payroll, and date column shows actual dates. Data validation: 177 of 178 ledger PO numbers match SmartPO records; 444 transactions have PO numbers; 38 SmartPO POs have no ledger invoices yet (open/committed).
+
+33. ✅ **Unmapped Locations Verified Working** - Confirmed the Review Unmapped page (`/locations/review`) works correctly with Lambda backend. 41 unmapped locations: 34 pending ($268K), 4 no_budget_match ($306K), 3 service_charge ($1K). Kirsten can: click "New Location" to mark as pending, click "Map to Existing" to alias to budgeted location. No code changes needed — already functional.
+
 32. ✅ **Sync Now Button Fix (Complete)** - Fixed Sync Now button to reliably sync files from Google Drive. Root cause: old scenario #4560202 watched the PARENT folder `AA_FOR BUDGET TRACKING WEBSITE`, but files are in SUBFOLDERS (`/Ledgers/` and `/POs/`). Google Drive Watch module doesn't see files in subfolders. Fix: Created 2 new Watch scenarios (#4560594 for Ledgers, #4560595 for POs) that each watch the correct subfolder. Lambda `/trigger-sync` triggers both via REST API (`POST /api/v2/scenarios/{id}/run`). Auto-sync runs every 15 min; Sync Now button triggers immediately. File: `handler.js` (trigger-sync endpoint).
 
 31. ✅ **File Dedup Clearing on Delete** - When files are deleted from dashboard, dedup records in `processed-files-registry.json` are now cleared so the same file can be re-synced from Google Drive. Matches by episode number (for ledgers) or filename prefix (for SmartPOs). File: `handler.js` (`/files/delete` handler).
