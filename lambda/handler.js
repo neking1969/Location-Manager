@@ -935,8 +935,24 @@ export async function handler(event, context) {
           smartpoFilename: syncInput.smartpoFile?.filename
         });
         console.log('[Handler] Persisted enriched ledger data to S3');
+      }
 
-        // Mark files as processed in registry (deduplication)
+      // Write SmartPO data independently (when synced without ledger)
+      if (result.success && !result.ledgers && result.smartpo?.purchaseOrders?.length > 0) {
+        const smartpoData = {
+          purchaseOrders: result.smartpo.purchaseOrders,
+          totalPOs: result.smartpo.totalPOs || result.smartpo.purchaseOrders.length,
+          totalAmount: result.smartpo.totalAmount || 0,
+          byStatus: result.smartpo.byStatus || {},
+          lastUpdated: new Date().toISOString(),
+          syncSessionId: body.syncSessionId || Date.now().toString()
+        };
+        await writeJsonToS3('processed/parsed-smartpo.json', smartpoData);
+        console.log(`[Handler] Wrote SmartPO data: ${smartpoData.totalPOs} POs, $${smartpoData.totalAmount.toFixed(2)}`);
+      }
+
+      // Mark files as processed in registry (deduplication)
+      if (result.success) {
         for (const fileInfo of processedFiles) {
           if (fileInfo.status === 'processed') {
             await markFileProcessed(fileInfo.fileHash, fileInfo.fileName, {
@@ -1146,11 +1162,35 @@ export async function handler(event, context) {
           updatedAt: new Date().toISOString()
         });
 
+        // Clear dedup records so the file can be re-synced from Google Drive
+        let dedupCleared = 0;
+        try {
+          const registry = await readJsonFromS3('processed-files-registry.json');
+          if (registry.files) {
+            const episode = fileKey.startsWith('ledger-ep') ? fileKey.replace('ledger-ep', '') : null;
+            const isSmartpo = fileKey.startsWith('smartpo-');
+            for (const [hash, entry] of Object.entries(registry.files)) {
+              const name = entry.fileName || '';
+              if ((episode && name.startsWith(episode + ' ')) || (isSmartpo && name.toLowerCase().startsWith('po-log'))) {
+                delete registry.files[hash];
+                dedupCleared++;
+              }
+            }
+            if (dedupCleared > 0) {
+              await writeJsonToS3('processed-files-registry.json', registry);
+              console.log(`[Handler] Cleared ${dedupCleared} dedup record(s) for ${fileKey}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[Handler] Could not clear dedup records:', e.message);
+        }
+
         result = {
           success: true,
           deletedFileKey: fileKey,
           deletedTransactions: deletedTxCount,
           deletedAmount,
+          dedupCleared,
           message: `Removed ${deletedTxCount} transactions ($${Math.abs(deletedAmount).toLocaleString()})`
         };
         console.log(`[Handler] File deleted: ${fileKey} — ${deletedTxCount} txns, $${deletedAmount.toFixed(2)}`);
