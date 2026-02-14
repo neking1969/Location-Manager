@@ -140,6 +140,8 @@ bash lambda/deploy.sh
 
 ## Recent Changes (2026-02-14)
 
+35. ✅ **Report Date Fix for Episode 102** - Episode 102's filename (`Episode 102 GL Ledger`) doesn't match the standard `101 6304-6342 MMDDYY.xlsx` pattern, so `parseFilename()` returned null and no `reportDate` was set. Two fixes: (1) Lambda `handler.js` `/files` endpoint now derives `reportDate` from transaction data or `parsedAt` when filename can't be parsed. Deployed to Lambda. (2) Dashboard `FileVerification.tsx` now always shows Report Date row with `processedAt` as fallback. Committed `d8455ec` (dashboard build #115), Lambda redeployed.
+
 34. ✅ **PO Number Display Fix (Dashboard)** - Fixed `locations-budget/route.ts` in Shards_Ledger dashboard (commit `aaadb53`, build #114). The `transformLocation()` function was hardcoding `transType: "AP"` and dropping `poNumber`, `documentNumber`, and `effectiveDate` from Lambda response. Now all 4 fields pass through correctly. Effect: PO# and Doc# columns show actual PO numbers (e.g., `1WZX0334`), transaction tabs correctly split POs/Invoices/Checks/Payroll, and date column shows actual dates. Data validation: 177 of 178 ledger PO numbers match SmartPO records; 444 transactions have PO numbers; 38 SmartPO POs have no ledger invoices yet (open/committed).
 
 33. ✅ **Unmapped Locations Verified Working** - Confirmed the Review Unmapped page (`/locations/review`) works correctly with Lambda backend. 41 unmapped locations: 34 pending ($268K), 4 no_budget_match ($306K), 3 service_charge ($1K). Kirsten can: click "New Location" to mark as pending, click "Map to Existing" to alias to budgeted location. No code changes needed — already functional.
