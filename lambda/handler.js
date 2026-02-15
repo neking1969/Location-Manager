@@ -9,6 +9,12 @@ import { transformBudgetData } from '../src/parsers/budget.js';
 import { generateFileHash, checkFileProcessed, markFileProcessed, classifyFileType } from '../src/utils/fileDeduplication.js';
 import { parseMultipart, extractBoundary } from '../src/utils/parseMultipart.js';
 import { getAuth, scanAndDownloadNewFiles, moveFile } from '../src/utils/googleDrive.js';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, ScanCommand, QueryCommand, PutCommand, DeleteCommand, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+
+const ddbClient = new DynamoDBClient({ region: 'us-west-2' });
+const ddb = DynamoDBDocumentClient.from(ddbClient);
+const BUDGETS_TABLE = 'shards-budgets';
 
 const ALL_CATEGORIES = [
   'Loc Fees', 'Addl. Site Fees', 'Site Personnel', 'Permits',
@@ -917,11 +923,45 @@ async function performGoogleDriveSync() {
   };
 }
 
+async function recalcTotals(budgetId, locationId) {
+  const lineItems = await ddb.send(new QueryCommand({
+    TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': budgetId, ':sk': `LI#${locationId}#` }
+  }));
+  const locTotal = (lineItems.Items || []).reduce((sum, li) => sum + (li.subtotal || 0), 0);
+
+  const locResp = await ddb.send(new QueryCommand({
+    TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+    ExpressionAttributeValues: { ':pk': budgetId, ':sk': `LOC#${locationId}` }
+  }));
+  if (locResp.Items?.[0]) {
+    const loc = locResp.Items[0];
+    loc.total = locTotal;
+    await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: loc }));
+  }
+
+  const allLocs = await ddb.send(new QueryCommand({
+    TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'LOC#' }
+  }));
+  const budgetTotal = (allLocs.Items || []).reduce((sum, l) => sum + (l.total || 0), 0);
+
+  const metaResp = await ddb.send(new QueryCommand({
+    TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+    ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'META' }
+  }));
+  if (metaResp.Items?.[0]) {
+    const meta = metaResp.Items[0];
+    meta.total = budgetTotal;
+    await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: meta }));
+  }
+}
+
 export async function handler(event, context) {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
 
@@ -1693,6 +1733,178 @@ export async function handler(event, context) {
             console.log(`[Handler] Distributed ${allItems.length} "all" byCategoryLocationEpisode items across ${activeEps.size} episodes`);
           }
         }
+      }
+    } else if (path.includes('/budgets/line-items')) {
+      if (method === 'GET') {
+        const qs = event.queryStringParameters || {};
+        const budgetId = qs.budgetId;
+        const locationId = qs.locationId;
+        if (!budgetId || !locationId) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'budgetId and locationId required' }) };
+        }
+        const resp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': `LI#${locationId}#` }
+        }));
+        result = { items: resp.Items || [] };
+      } else if (method === 'POST') {
+        const { budgetId, locationId, lineItemId, category, name: itemName, quantity, rate, units } = body;
+        const subtotal = (quantity || 1) * (rate || 0) * (units || 1);
+        await ddb.send(new PutCommand({
+          TableName: BUDGETS_TABLE, Item: {
+            PK: budgetId, SK: `LI#${locationId}#${lineItemId}`,
+            category, name: itemName, quantity: quantity || 1, rate: rate || 0, units: units || 1, subtotal
+          }
+        }));
+        await recalcTotals(budgetId, locationId);
+        result = { success: true, lineItemId, subtotal };
+      } else if (method === 'PUT') {
+        const { budgetId, locationId, lineItemId, ...updates } = body;
+        if (updates.quantity !== undefined || updates.rate !== undefined || updates.units !== undefined) {
+          updates.subtotal = (updates.quantity || 1) * (updates.rate || 0) * (updates.units || 1);
+        }
+        const existing = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': `LI#${locationId}#${lineItemId}` }
+        }));
+        const item = existing.Items?.[0] || {};
+        const merged = { ...item, ...updates, PK: budgetId, SK: `LI#${locationId}#${lineItemId}` };
+        if (updates.quantity !== undefined || updates.rate !== undefined || updates.units !== undefined) {
+          merged.subtotal = (merged.quantity || 1) * (merged.rate || 0) * (merged.units || 1);
+        }
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: merged }));
+        await recalcTotals(budgetId, locationId);
+        result = { success: true, item: merged };
+      } else if (method === 'DELETE') {
+        const { budgetId, locationId, lineItemId } = body;
+        await ddb.send(new DeleteCommand({
+          TableName: BUDGETS_TABLE, Key: { PK: budgetId, SK: `LI#${locationId}#${lineItemId}` }
+        }));
+        await recalcTotals(budgetId, locationId);
+        result = { success: true };
+      }
+    } else if (path.includes('/budgets/locations')) {
+      if (method === 'GET') {
+        const qs = event.queryStringParameters || {};
+        const budgetId = qs.budgetId;
+        if (!budgetId) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'budgetId required' }) };
+        }
+        const resp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'LOC#' }
+        }));
+        result = { locations: resp.Items || [] };
+      } else if (method === 'POST') {
+        const { budgetId, locationId, name: locName, address, contactName, notes } = body;
+        await ddb.send(new PutCommand({
+          TableName: BUDGETS_TABLE, Item: {
+            PK: budgetId, SK: `LOC#${locationId}`,
+            name: locName, total: 0, address: address || '', contactName: contactName || '', notes: notes || ''
+          }
+        }));
+        // Update budget location count
+        const locs = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'LOC#' }
+        }));
+        const metaResp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'META' }
+        }));
+        if (metaResp.Items?.[0]) {
+          const meta = metaResp.Items[0];
+          meta.locationCount = (locs.Items || []).length;
+          await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: meta }));
+        }
+        result = { success: true, locationId };
+      } else if (method === 'DELETE') {
+        const { budgetId, locationId } = body;
+        // Delete all line items for this location
+        const lineItems = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': `LI#${locationId}#` }
+        }));
+        if (lineItems.Items?.length) {
+          const batches = [];
+          for (let i = 0; i < lineItems.Items.length; i += 25) {
+            batches.push(lineItems.Items.slice(i, i + 25));
+          }
+          for (const batch of batches) {
+            await ddb.send(new BatchWriteCommand({
+              RequestItems: { [BUDGETS_TABLE]: batch.map(item => ({ DeleteRequest: { Key: { PK: item.PK, SK: item.SK } } })) }
+            }));
+          }
+        }
+        // Delete the location record
+        await ddb.send(new DeleteCommand({
+          TableName: BUDGETS_TABLE, Key: { PK: budgetId, SK: `LOC#${locationId}` }
+        }));
+        // Update budget totals
+        const remainingLocs = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'LOC#' }
+        }));
+        const metaResp2 = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'META' }
+        }));
+        if (metaResp2.Items?.[0]) {
+          const meta = metaResp2.Items[0];
+          meta.locationCount = (remainingLocs.Items || []).length;
+          meta.total = (remainingLocs.Items || []).reduce((sum, l) => sum + (l.total || 0), 0);
+          await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: meta }));
+        }
+        result = { success: true };
+      }
+    } else if (path.includes('/budgets')) {
+      if (method === 'GET') {
+        const resp = await ddb.send(new ScanCommand({
+          TableName: BUDGETS_TABLE, FilterExpression: 'SK = :meta',
+          ExpressionAttributeValues: { ':meta': 'META' }
+        }));
+        result = { budgets: (resp.Items || []).sort((a, b) => a.PK.localeCompare(b.PK)) };
+      } else if (method === 'POST') {
+        const { budgetId, episode, title, date, status } = body;
+        await ddb.send(new PutCommand({
+          TableName: BUDGETS_TABLE, Item: {
+            PK: budgetId, SK: 'META',
+            episode: episode || budgetId, title: title || '', date: date || new Date().toISOString().split('T')[0],
+            status: status || 'draft', total: 0, locationCount: 0
+          }
+        }));
+        result = { success: true, budgetId };
+      } else if (method === 'PUT') {
+        const { budgetId, ...updates } = body;
+        const existing = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': budgetId, ':sk': 'META' }
+        }));
+        if (!existing.Items?.[0]) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Budget not found' }) };
+        }
+        const merged = { ...existing.Items[0], ...updates, PK: budgetId, SK: 'META' };
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: merged }));
+        result = { success: true, budget: merged };
+      } else if (method === 'DELETE') {
+        const { budgetId } = body;
+        // Get all items for this budget
+        const allItems = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': budgetId }
+        }));
+        if (allItems.Items?.length) {
+          const batches = [];
+          for (let i = 0; i < allItems.Items.length; i += 25) {
+            batches.push(allItems.Items.slice(i, i + 25));
+          }
+          for (const batch of batches) {
+            await ddb.send(new BatchWriteCommand({
+              RequestItems: { [BUDGETS_TABLE]: batch.map(item => ({ DeleteRequest: { Key: { PK: item.PK, SK: item.SK } } })) }
+            }));
+          }
+        }
+        result = { success: true };
       }
     } else if (path.includes('/trigger-sync') && method === 'POST') {
       console.log('[Handler] Manual sync triggered via Sync Now button');

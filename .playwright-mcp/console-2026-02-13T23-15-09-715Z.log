@@ -1,0 +1,4 @@
+[    1504ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://peoplestack-pa.clients6.google.com/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete:0
+[    1547ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://v1/genai/getSettings?key=:0
+[    1588ms] [WARNING] An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing. @ https://drive.google.com/auth_warmup:0
+[   70880ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://accounts.google.com/v3/signin/_/surveyagc?f.sid=-30876455967516340&bl=boq_identityfrontendauthuiserver_20260208.08_p0&hl=en-US&TL=AHU8sQsVOwY7imSa64WRbxOjQeMRqJ_ptKyLvH6QbgISrmE43Go876vBkwq_Dr0Y&_reqid=854959&rt=j:0
