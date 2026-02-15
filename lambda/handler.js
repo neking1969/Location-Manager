@@ -157,6 +157,7 @@ const LOCATION_ALIASES = {
   'bretts': 'bret',
   'brett': 'bret',
   'melrose bar': 'melrose video bar',
+  'melrose ave': 'melrose video bar',
   'melrose asylum': 'melrose video bar',
   'melrose/asylum': 'melrose video bar',
 };

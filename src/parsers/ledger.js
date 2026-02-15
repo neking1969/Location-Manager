@@ -347,7 +347,8 @@ function extractLocationFromDescription(description) {
   if (colonMatch) {
     const loc = cleanLocation(colonMatch[1]);
     if (loc.length > 2 && !categoryOnly.includes(loc) && !isPayType(loc) && !isNotLocation(loc)
-        && !/^M-\d+$/.test(loc)) {
+        && !/^M-\d+$/.test(loc)
+        && !/^(FIRE|POLICE|GUARDS?|MEDIC|PERMITS?|SECURITY|EQUIPMENT|PARKING)$/i.test(loc)) {
       return loc;
     }
   }
