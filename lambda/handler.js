@@ -179,10 +179,27 @@ function applyAliases(name) {
 
 // Extract location keyword from description for matching
 // Handles patterns like "FINAL LOC FEE:MELROSE BAR (102)" → "MELROSE BAR"
+// Also handles "PERMITS:MELROSE AVE:FIRE" → "MELROSE AVE" (skips GL category suffixes)
+const GL_CATEGORY_NAMES = /^(FIRE|POLICE|SECURITY|PERMITS?|PARKING|EQUIPMENT)$/i;
 function extractDescriptionKeyword(description) {
   if (!description) return null;
 
-  // Pattern 1: After colon, before optional episode suffix
+  const segments = description.split(':').map(s => s.trim());
+  if (segments.length >= 3) {
+    const last = segments[segments.length - 1].replace(/\s*\(\d+\)\s*$/, '').trim();
+    if (GL_CATEGORY_NAMES.test(last)) {
+      const middle = segments[segments.length - 2].replace(/\s*\(\d+\)\s*$/, '').trim();
+      if (middle.length > 3
+          && !/^(FINAL|ADD'?L|SITE REP|IN HOUSE|NO WEEKENDS)$/i.test(middle)
+          && !/^(REGULAR|OVERTIME|OT|DOUBLE\s*TIME|GOLDEN\s*TIME|MEAL\s*PENALTY|FLSAOT)\s*/i.test(middle)
+          && !/^\d+(\.\d+)?X$/i.test(middle)
+          && !/\b(ALLOWANCE|RENTAL|MILEAGE|PER\s*DIEM|WORKED)\b/i.test(middle)) {
+        return middle;
+      }
+    }
+  }
+
+  // Fallback: last segment after colon, before optional episode suffix
   // "10/22-10/29 FINAL LOC FEE:MELROSE BAR (102)" → "MELROSE BAR"
   const colonMatch = description.match(/:([^:]+?)(?:\s*\(\d+\))?$/);
   if (colonMatch) {
