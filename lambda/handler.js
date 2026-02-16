@@ -44,7 +44,9 @@ async function transformDynamoDBBudgetData() {
   const episodeLookup = new Map(); // budgetId -> episode name
   for (const budget of budgetMeta) {
     if (budget.PK && budget.episode) {
-      episodeLookup.set(budget.PK, String(budget.episode));
+      // Normalize episode: "Episode 101" → "101"
+      const episode = String(budget.episode).replace(/^Episode\s+/i, '');
+      episodeLookup.set(budget.PK, episode);
     }
   }
 
