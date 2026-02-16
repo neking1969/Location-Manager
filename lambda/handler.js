@@ -21,6 +21,124 @@ const ALL_CATEGORIES = [
   'Addl. Labor', 'Equipment', 'Parking', 'Fire', 'Police', 'Security'
 ];
 
+/**
+ * Reads budget data from DynamoDB and transforms it into the same structure
+ * as transformBudgetData() from Glide.
+ * Returns: { byLocationEpisode, byEpisodeCategory, byCategoryLocationEpisode, episodeTotals, metadata }
+ */
+async function transformDynamoDBBudgetData() {
+  console.log('[Budget/DynamoDB] Fetching budgets from DynamoDB...');
+
+  // Scan all items from DynamoDB (budgets, locations, line items)
+  const scanResult = await ddb.send(new ScanCommand({ TableName: BUDGETS_TABLE }));
+  const items = scanResult.Items || [];
+
+  // Separate by type based on SK pattern
+  const budgetMeta = items.filter(i => i.SK === 'META');
+  const locations = items.filter(i => i.SK && i.SK.startsWith('LOC#'));
+  const lineItems = items.filter(i => i.SK && i.SK.startsWith('LI#'));
+
+  console.log(`[Budget/DynamoDB] Found ${budgetMeta.length} budgets, ${locations.length} locations, ${lineItems.length} line items`);
+
+  // Build episode lookup from budget metadata
+  const episodeLookup = new Map(); // budgetId -> episode name
+  for (const budget of budgetMeta) {
+    if (budget.PK && budget.episode) {
+      episodeLookup.set(budget.PK, String(budget.episode));
+    }
+  }
+
+  // Aggregate line items by location+episode and episode+category
+  const locEpMap = new Map(); // "location|episode" -> { location, episode, totalBudget }
+  const epCatMap = new Map(); // "episode|category" -> { episode, category, totalBudget }
+  const catLocEpMap = new Map(); // "category|location|episode" -> { category, location, episode, totalBudget }
+
+  let skippedCount = 0;
+
+  for (const li of lineItems) {
+    const amount = parseFloat(li.subtotal) || 0;
+    if (amount === 0) {
+      skippedCount++;
+      continue;
+    }
+
+    // Extract location from SK: "LI#LocationName#lineItemId"
+    const skParts = (li.SK || '').split('#');
+    const locationName = skParts[1] || 'Unknown';
+
+    // Get episode from budget PK
+    const episode = episodeLookup.get(li.PK) || 'all';
+
+    // Normalize category (handle variations in category names)
+    const CATEGORY_NORMALIZE = {
+      'location fees': 'Loc Fees',
+      'loc fees': 'Loc Fees',
+      'site fees': 'Loc Fees',
+      'addl. site fees': 'Addl. Site Fees',
+      'site personnel': 'Site Personnel',
+      'addl. labor': 'Addl. Labor',
+      'equipment': 'Equipment',
+      'security': 'Security',
+      'police': 'Police',
+      'fire': 'Fire',
+      'permits': 'Permits',
+      'parking': 'Parking'
+    };
+    const rawCategory = li.category || 'Other';
+    const category = CATEGORY_NORMALIZE[rawCategory.toLowerCase().trim()] || rawCategory;
+
+    // Aggregate by location+episode
+    const locEpKey = `${locationName}|${episode}`;
+    if (!locEpMap.has(locEpKey)) {
+      locEpMap.set(locEpKey, { location: locationName, episode, totalBudget: 0 });
+    }
+    locEpMap.get(locEpKey).totalBudget += amount;
+
+    // Aggregate by episode+category
+    const epCatKey = `${episode}|${category}`;
+    if (!epCatMap.has(epCatKey)) {
+      epCatMap.set(epCatKey, { episode, category, totalBudget: 0 });
+    }
+    epCatMap.get(epCatKey).totalBudget += amount;
+
+    // Aggregate by category+location+episode
+    const catLocEpKey = `${category}|${locationName}|${episode}`;
+    if (!catLocEpMap.has(catLocEpKey)) {
+      catLocEpMap.set(catLocEpKey, { category, location: locationName, episode, totalBudget: 0 });
+    }
+    catLocEpMap.get(catLocEpKey).totalBudget += amount;
+  }
+
+  const byLocationEpisode = Array.from(locEpMap.values());
+  const byEpisodeCategory = Array.from(epCatMap.values());
+  const byCategoryLocationEpisode = Array.from(catLocEpMap.values());
+
+  // Calculate episode totals
+  const episodeTotals = {};
+  for (const item of byLocationEpisode) {
+    if (!episodeTotals[item.episode]) episodeTotals[item.episode] = 0;
+    episodeTotals[item.episode] += item.totalBudget;
+  }
+
+  console.log(`[Budget/DynamoDB] Transformed: ${byLocationEpisode.length} location-episodes, ${byEpisodeCategory.length} episode-categories, ${Object.keys(episodeTotals).length} episode groups`);
+  console.log(`[Budget/DynamoDB] Skipped ${skippedCount} zero-amount line items`);
+
+  return {
+    byLocationEpisode,
+    byEpisodeCategory,
+    byCategoryLocationEpisode,
+    episodeTotals,
+    metadata: {
+      budgetCount: budgetMeta.length,
+      locationCount: locations.length,
+      lineItemCount: lineItems.length,
+      lineItemsWithRate: lineItems.length - skippedCount,
+      generatedAt: new Date().toISOString(),
+      source: 'DynamoDB'
+    }
+  };
+}
+
 function generateComparison(budgets, ledgers) {
   const comparison = {};
 
@@ -1555,26 +1673,22 @@ export async function handler(event, context) {
         }
       }
 
-      // Always fetch fresh budgets from Glide (never stale S3 cache)
+      // Fetch fresh budgets from DynamoDB (replaced Glide)
       let budgets = null;
       try {
-        console.log('[Data] Fetching fresh budget data from Glide...');
-        const glide = createGlideClient();
-        const [glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets] = await Promise.all([
-          glide.getLocationsBudgets(),
-          glide.getBudgetLineItems(),
-          glide.getEpisodes(),
-          glide.getBudgets()
-        ]);
-        console.log(`[Data] Fetched ${glideLocationsBudgets.length} locations, ${glideBudgetLineItems.length} line items`);
-        budgets = transformBudgetData(glideLocationsBudgets, glideBudgetLineItems, glideEpisodes, glideBudgets);
+        console.log('[Data] Fetching fresh budget data from DynamoDB...');
+        budgets = await transformDynamoDBBudgetData();
         // Update S3 cache so it stays current
         await writeJsonToS3('static/parsed-budgets.json', budgets).catch(e =>
           console.warn('[Data] Failed to update S3 budget cache:', e.message)
         );
       } catch (e) {
-        console.warn('[Data] Glide budget fetch failed, falling back to S3 cache:', e.message);
+        console.error('[Data] DynamoDB budget fetch failed:', e.message, e.stack);
+        // Fallback to S3 cache if DynamoDB fails
         budgets = await readJsonFromS3('static/parsed-budgets.json').catch(() => null);
+        if (!budgets) {
+          console.error('[Data] S3 fallback also failed - no budget data available');
+        }
       }
 
       if (!ledgers || !budgets) {
