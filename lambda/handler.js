@@ -122,6 +122,16 @@ async function transformDynamoDBBudgetData() {
     episodeTotals[item.episode] += item.totalBudget;
   }
 
+  // Include budget-only episodes (budgets with no line items)
+  for (const budget of budgetMeta) {
+    if (budget.episode) {
+      const episode = String(budget.episode).replace(/^Episode\s+/i, '');
+      if (!episodeTotals[episode]) {
+        episodeTotals[episode] = 0; // Budget exists but no line items yet
+      }
+    }
+  }
+
   console.log(`[Budget/DynamoDB] Transformed: ${byLocationEpisode.length} location-episodes, ${byEpisodeCategory.length} episode-categories, ${Object.keys(episodeTotals).length} episode groups`);
   console.log(`[Budget/DynamoDB] Skipped ${skippedCount} zero-amount line items`);
 
