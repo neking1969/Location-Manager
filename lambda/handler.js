@@ -257,6 +257,7 @@ function buildAliasLookup(mappings) {
   const serviceChargePatterns = [];
   const pendingLocations = new Map();
   const dismissedLocations = new Set();
+  const overheadLocations = new Set();
 
   for (const m of mappings || []) {
     const ledgerLoc = (m.ledgerLocation || '').toLowerCase().trim();
@@ -267,10 +268,16 @@ function buildAliasLookup(mappings) {
       for (const alias of m.aliases || []) {
         serviceChargePatterns.push(alias.toLowerCase().trim());
       }
-    } else if (budgetLoc.startsWith('DISMISSED:')) {
-      dismissedLocations.add(ledgerLoc);
+    } else if (budgetLoc.startsWith('OVERHEAD:')) {
+      overheadLocations.add(ledgerLoc);
       for (const alias of m.aliases || []) {
-        dismissedLocations.add(alias.toLowerCase().trim());
+        overheadLocations.add(alias.toLowerCase().trim());
+      }
+    } else if (budgetLoc.startsWith('DISMISSED:')) {
+      // Backward compatibility: treat DISMISSED same as OVERHEAD
+      overheadLocations.add(ledgerLoc);
+      for (const alias of m.aliases || []) {
+        overheadLocations.add(alias.toLowerCase().trim());
       }
     } else if (budgetLoc.startsWith('PENDING:')) {
       const pendingName = budgetLoc.replace('PENDING:', '');
@@ -286,7 +293,7 @@ function buildAliasLookup(mappings) {
     }
   }
 
-  return { lookup, serviceChargePatterns, pendingLocations, dismissedLocations };
+  return { lookup, serviceChargePatterns, pendingLocations, dismissedLocations, overheadLocations };
 }
 
 // Fallback hardcoded aliases for basic typo correction
@@ -484,7 +491,7 @@ function findBestBudgetMatch(actualName, budgetByLocation, threshold = 0.5, txnC
 function generateLocationComparison(budgets, ledgers, locationMappings = null, smartpo = null) {
   // Build alias lookup from S3 mappings
   const aliasData = buildAliasLookup(locationMappings?.mappings);
-  const { lookup: aliasLookup, serviceChargePatterns, pendingLocations, dismissedLocations } = aliasData;
+  const { lookup: aliasLookup, serviceChargePatterns, pendingLocations, dismissedLocations, overheadLocations } = aliasData;
   console.log(`[Handler] Loaded ${aliasLookup.size} aliases, ${serviceChargePatterns.length} service patterns, ${pendingLocations.size} pending, ${dismissedLocations.size} dismissed`);
   console.log(`[Handler] SmartPO data: ${smartpo?.totalPOs || 0} POs, $${(smartpo?.totalAmount || 0).toFixed(2)} total`);
 
@@ -661,10 +668,11 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
   }
   console.log(`[Handler] Description keyword overrides: ${descriptionOverrides}`);
 
-  // Classify into budgeted vs unmapped
+  // Classify into budgeted vs unmapped vs overhead
   // Aggregate actuals by matched budget location
   const budgetedMap = new Map(); // budgetKey -> aggregated data
   const unmappedLocations = [];
+  const overheadItems = [];
 
   // Process locations with actuals - use fuzzy matching to find budget
   for (const [key, actuals] of actualsByLocation) {
@@ -693,21 +701,20 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       entry.transactions.push(...actuals.transactions);
       entry.matchTypes.add(match.matchType);
     } else {
-      // Check if this location has been dismissed (overhead, permits, etc.)
-      const isDismissed = dismissedLocations.has(key);
+      // Check if this location is overhead (OVERHEAD: or legacy DISMISSED: prefix)
+      const isOverhead = overheadLocations.has(key);
       // Check if this is a known SERVICE_CHARGE (production overhead)
       const isServiceCharge = serviceChargePatterns.includes(key);
       // Check if this is a PENDING location (known but not yet in Glide)
       const pendingName = pendingLocations.get(key);
-      if (isDismissed) {
-        // Skip entirely — dismissed locations are excluded from all reports
-      } else if (isServiceCharge) {
-        unmappedLocations.push({
+      if (isOverhead || isServiceCharge) {
+        overheadItems.push({
           locationName: actuals.locationName,
           totalAmount: actuals.totalAmount,
-          transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'service_charge' })),
-          reason: 'service_charge',
-          reasonLabel: 'Production overhead (no budget location)'
+          transactionCount: actuals.transactions.length,
+          transactions: actuals.transactions.map(tx => ({ ...tx, reason: 'overhead' })),
+          reason: 'overhead',
+          reasonLabel: isServiceCharge ? 'Production overhead (service charge)' : 'Production overhead'
         });
       } else if (pendingName) {
         unmappedLocations.push({
@@ -865,6 +872,9 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
     summary,
     budgetedLocations: budgetedLocations.sort((a, b) => b.actualAmount - a.actualAmount),
     unmappedLocations: unmappedLocations.sort((a, b) => Math.abs(b.totalAmount) - Math.abs(a.totalAmount)),
+    // Overhead items (OVERHEAD: and DISMISSED: prefix, plus SERVICE_CHARGE)
+    // Visible on dashboard but separate from location tracking
+    overheadItems: overheadItems.sort((a, b) => Math.abs(b.totalAmount) - Math.abs(a.totalAmount)),
     // Include PO data for UI breakdown
     purchaseOrders: {
       total: smartpo?.totalPOs || 0,
