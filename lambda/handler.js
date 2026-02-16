@@ -256,6 +256,7 @@ function buildAliasLookup(mappings) {
   const lookup = new Map();
   const serviceChargePatterns = [];
   const pendingLocations = new Map();
+  const dismissedLocations = new Set();
 
   for (const m of mappings || []) {
     const ledgerLoc = (m.ledgerLocation || '').toLowerCase().trim();
@@ -265,6 +266,11 @@ function buildAliasLookup(mappings) {
       serviceChargePatterns.push(ledgerLoc);
       for (const alias of m.aliases || []) {
         serviceChargePatterns.push(alias.toLowerCase().trim());
+      }
+    } else if (budgetLoc.startsWith('DISMISSED:')) {
+      dismissedLocations.add(ledgerLoc);
+      for (const alias of m.aliases || []) {
+        dismissedLocations.add(alias.toLowerCase().trim());
       }
     } else if (budgetLoc.startsWith('PENDING:')) {
       const pendingName = budgetLoc.replace('PENDING:', '');
@@ -280,7 +286,7 @@ function buildAliasLookup(mappings) {
     }
   }
 
-  return { lookup, serviceChargePatterns, pendingLocations };
+  return { lookup, serviceChargePatterns, pendingLocations, dismissedLocations };
 }
 
 // Fallback hardcoded aliases for basic typo correction
@@ -478,8 +484,8 @@ function findBestBudgetMatch(actualName, budgetByLocation, threshold = 0.5, txnC
 function generateLocationComparison(budgets, ledgers, locationMappings = null, smartpo = null) {
   // Build alias lookup from S3 mappings
   const aliasData = buildAliasLookup(locationMappings?.mappings);
-  const { lookup: aliasLookup, serviceChargePatterns, pendingLocations } = aliasData;
-  console.log(`[Handler] Loaded ${aliasLookup.size} aliases, ${serviceChargePatterns.length} service patterns, ${pendingLocations.size} pending locations`);
+  const { lookup: aliasLookup, serviceChargePatterns, pendingLocations, dismissedLocations } = aliasData;
+  console.log(`[Handler] Loaded ${aliasLookup.size} aliases, ${serviceChargePatterns.length} service patterns, ${pendingLocations.size} pending, ${dismissedLocations.size} dismissed`);
   console.log(`[Handler] SmartPO data: ${smartpo?.totalPOs || 0} POs, $${(smartpo?.totalAmount || 0).toFixed(2)} total`);
 
   // isServiceCharge removed — was incorrectly filtering $930K+ of valid GL transactions
@@ -687,11 +693,15 @@ function generateLocationComparison(budgets, ledgers, locationMappings = null, s
       entry.transactions.push(...actuals.transactions);
       entry.matchTypes.add(match.matchType);
     } else {
+      // Check if this location has been dismissed (overhead, permits, etc.)
+      const isDismissed = dismissedLocations.has(key);
       // Check if this is a known SERVICE_CHARGE (production overhead)
       const isServiceCharge = serviceChargePatterns.includes(key);
       // Check if this is a PENDING location (known but not yet in Glide)
       const pendingName = pendingLocations.get(key);
-      if (isServiceCharge) {
+      if (isDismissed) {
+        // Skip entirely — dismissed locations are excluded from all reports
+      } else if (isServiceCharge) {
         unmappedLocations.push({
           locationName: actuals.locationName,
           totalAmount: actuals.totalAmount,
