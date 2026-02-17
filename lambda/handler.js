@@ -1929,6 +1929,155 @@ export async function handler(event, context) {
         await recalcTotals(budgetId, locationId);
         result = { success: true };
       }
+    } else if (path.includes('/budget-config')) {
+      const S3_BUDGET_CONFIG_KEY = 'config/budget-config.json';
+
+      async function loadBudgetConfig() {
+        try {
+          return await readJsonFromS3(S3_BUDGET_CONFIG_KEY);
+        } catch (err) {
+          if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+            return { blocks: [], sentHistory: {}, updatedAt: new Date().toISOString() };
+          }
+          throw err;
+        }
+      }
+
+      async function saveBudgetConfig(data) {
+        data.updatedAt = new Date().toISOString();
+        await writeJsonToS3(S3_BUDGET_CONFIG_KEY, data);
+        return data;
+      }
+
+      if (method === 'GET') {
+        result = await loadBudgetConfig();
+      } else if (method === 'POST') {
+        const config = await loadBudgetConfig();
+        const { action } = body;
+
+        if (action === 'create-block') {
+          const { name, episodes } = body;
+          if (!episodes || episodes.length < 2) {
+            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Need at least 2 episodes for a block' }) };
+          }
+          // Remove these episodes from any existing blocks
+          for (const block of config.blocks) {
+            block.episodes = block.episodes.filter(ep => !episodes.includes(ep));
+          }
+          config.blocks = config.blocks.filter(b => b.episodes.length >= 2);
+          // Create new block
+          config.blocks.push({
+            id: `block-${Date.now()}`,
+            name: name || `Block ${config.blocks.length + 1}`,
+            episodes,
+            createdAt: new Date().toISOString()
+          });
+          await saveBudgetConfig(config);
+          result = { success: true, config };
+
+        } else if (action === 'remove-block') {
+          const { blockId } = body;
+          config.blocks = config.blocks.filter(b => b.id !== blockId);
+          await saveBudgetConfig(config);
+          result = { success: true, config };
+
+        } else if (action === 'mark-sent') {
+          const { episode, sentTo, note } = body;
+          if (!episode) {
+            return { statusCode: 400, headers, body: JSON.stringify({ error: 'episode required' }) };
+          }
+          if (!config.sentHistory[episode]) config.sentHistory[episode] = [];
+          config.sentHistory[episode].push({
+            sentAt: new Date().toISOString(),
+            sentTo: sentTo || '',
+            note: note || ''
+          });
+          await saveBudgetConfig(config);
+          result = { success: true, config };
+
+        } else if (action === 'clear-sent') {
+          const { episode } = body;
+          if (episode) {
+            delete config.sentHistory[episode];
+          }
+          await saveBudgetConfig(config);
+          result = { success: true, config };
+
+        } else {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action. Use: create-block, remove-block, mark-sent, clear-sent' }) };
+        }
+      }
+    } else if (path.includes('/standard-line-items')) {
+      const S3_STANDARD_ITEMS_KEY = 'config/standard-line-items.json';
+
+      async function loadStandardItems() {
+        try {
+          const data = await readJsonFromS3(S3_STANDARD_ITEMS_KEY);
+          return data;
+        } catch (err) {
+          if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+            return { version: 1, updatedAt: new Date().toISOString(), items: [] };
+          }
+          throw err;
+        }
+      }
+
+      async function saveStandardItems(data) {
+        data.updatedAt = new Date().toISOString();
+        await writeJsonToS3(S3_STANDARD_ITEMS_KEY, data);
+        return data;
+      }
+
+      if (method === 'GET') {
+        result = await loadStandardItems();
+      } else if (method === 'POST') {
+        const data = await loadStandardItems();
+        const { category, name: itemName, unit, rate, time, row } = body;
+        if (!itemName || !category) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'category and name required' }) };
+        }
+        const newItem = {
+          id: `sli-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          category,
+          name: itemName,
+          unit: unit || 0,
+          rate: rate || 0,
+          time: time || 0,
+          row: row || data.items.length + 1,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        data.items.push(newItem);
+        await saveStandardItems(data);
+        result = { success: true, item: newItem };
+      } else if (method === 'PUT') {
+        const data = await loadStandardItems();
+        const { id, ...updates } = body;
+        if (!id) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+        }
+        const idx = data.items.findIndex(i => i.id === id);
+        if (idx === -1) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Item not found' }) };
+        }
+        data.items[idx] = { ...data.items[idx], ...updates, id, updatedAt: new Date().toISOString() };
+        await saveStandardItems(data);
+        result = { success: true, item: data.items[idx] };
+      } else if (method === 'DELETE') {
+        const data = await loadStandardItems();
+        const { id } = body;
+        if (!id) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+        }
+        const idx = data.items.findIndex(i => i.id === id);
+        if (idx === -1) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Item not found' }) };
+        }
+        data.items.splice(idx, 1);
+        await saveStandardItems(data);
+        result = { success: true };
+      }
     } else if (path.includes('/budgets/locations')) {
       if (method === 'GET') {
         const qs = event.queryStringParameters || {};
@@ -1942,13 +2091,53 @@ export async function handler(event, context) {
         }));
         result = { locations: resp.Items || [] };
       } else if (method === 'POST') {
-        const { budgetId, locationId, name: locName, address, contactName, notes } = body;
+        const { budgetId, locationId, name: locName, address, contactName, notes, skipStandardItems } = body;
         await ddb.send(new PutCommand({
           TableName: BUDGETS_TABLE, Item: {
             PK: budgetId, SK: `LOC#${locationId}`,
             name: locName, total: 0, address: address || '', contactName: contactName || '', notes: notes || ''
           }
         }));
+
+        // Auto-apply standard line items to the new location budget
+        let standardItemsApplied = 0;
+        if (!skipStandardItems) {
+          try {
+            const stdData = await readJsonFromS3('config/standard-line-items.json');
+            const activeItems = (stdData.items || []).filter(i => i.isActive);
+            console.log(`[Budget] Auto-applying ${activeItems.length} standard line items to ${locName} (${locationId})`);
+
+            // Write in batches of 25 (DynamoDB limit)
+            const putItems = activeItems.map((item, idx) => ({
+              PK: budgetId,
+              SK: `LI#${locationId}#std-${idx + 1}`,
+              category: item.category,
+              name: item.name,
+              quantity: item.time || 1,
+              rate: item.rate || 0,
+              units: item.unit || 1,
+              subtotal: (item.time || 1) * (item.rate || 0) * (item.unit || 1),
+              isStandardItem: true,
+              standardItemId: item.id
+            }));
+
+            for (let i = 0; i < putItems.length; i += 25) {
+              const batch = putItems.slice(i, i + 25);
+              await ddb.send(new BatchWriteCommand({
+                RequestItems: {
+                  [BUDGETS_TABLE]: batch.map(item => ({ PutRequest: { Item: item } }))
+                }
+              }));
+            }
+            standardItemsApplied = activeItems.length;
+          } catch (stdErr) {
+            console.warn('[Budget] Could not load standard items (may not exist yet):', stdErr.message);
+          }
+        }
+
+        // Recalc totals after adding standard items
+        await recalcTotals(budgetId, locationId);
+
         // Update budget location count
         const locs = await ddb.send(new QueryCommand({
           TableName: BUDGETS_TABLE, KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
@@ -1963,7 +2152,7 @@ export async function handler(event, context) {
           meta.locationCount = (locs.Items || []).length;
           await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: meta }));
         }
-        result = { success: true, locationId };
+        result = { success: true, locationId, standardItemsApplied };
       } else if (method === 'DELETE') {
         const { budgetId, locationId } = body;
         // Delete all line items for this location
@@ -2050,6 +2239,261 @@ export async function handler(event, context) {
             }));
           }
         }
+        result = { success: true };
+      }
+    } else if (path.includes('/itineraries/share/')) {
+      const shareToken = path.split('/itineraries/share/')[1]?.split('?')[0];
+      if (method === 'GET') {
+        const shareResult = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `SHARE#${shareToken}`, ':sk': 'META' }
+        }));
+        const shareItem = shareResult.Items?.[0];
+        if (!shareItem) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Itinerary not found' }) };
+        }
+        const itinResult = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `ITIN#${shareItem.itineraryId}`, ':sk': 'META' }
+        }));
+        const itin = itinResult.Items?.[0];
+        if (!itin) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Itinerary not found' }) };
+        }
+        result = {
+          id: itin.PK.replace('ITIN#', ''),
+          title: itin.title || '',
+          date: itin.date || '',
+          episode: itin.episode || '',
+          department: itin.department || '',
+          createdBy: itin.createdBy || '',
+          createdAt: itin.createdAt || '',
+          updatedAt: itin.updatedAt || '',
+          shareToken: itin.shareToken || '',
+          stops: JSON.parse(itin.stops || '[]')
+        };
+      }
+    } else if (path.includes('/itineraries')) {
+      const idMatch = path.match(/\/itineraries\/([a-zA-Z0-9_-]+)/);
+      const itineraryId = idMatch ? idMatch[1] : null;
+
+      if (!itineraryId && method === 'GET') {
+        const scanResult = await ddb.send(new ScanCommand({
+          TableName: BUDGETS_TABLE,
+          FilterExpression: 'begins_with(PK, :prefix) AND SK = :sk',
+          ExpressionAttributeValues: { ':prefix': 'ITIN#', ':sk': 'META' }
+        }));
+        const items = (scanResult.Items || []).map(item => ({
+          id: item.PK.replace('ITIN#', ''),
+          title: item.title || '',
+          date: item.date || '',
+          episode: item.episode || '',
+          department: item.department || '',
+          createdBy: item.createdBy || '',
+          createdAt: item.createdAt || '',
+          updatedAt: item.updatedAt || '',
+          shareToken: item.shareToken || '',
+          stopCount: JSON.parse(item.stops || '[]').length
+        }));
+        items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        result = { itineraries: items };
+
+      } else if (!itineraryId && method === 'POST') {
+        const id = `itin-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const now = new Date().toISOString();
+        const item = {
+          PK: `ITIN#${id}`,
+          SK: 'META',
+          title: body.title || 'Untitled Itinerary',
+          date: body.date || '',
+          episode: body.episode || '',
+          department: body.department || '',
+          createdBy: body.createdBy || '',
+          createdAt: now,
+          updatedAt: now,
+          shareToken: '',
+          stops: JSON.stringify(body.stops || [])
+        };
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: item }));
+        result = {
+          id,
+          title: item.title,
+          date: item.date,
+          episode: item.episode,
+          department: item.department,
+          createdBy: item.createdBy,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          shareToken: '',
+          stops: body.stops || []
+        };
+
+      } else if (itineraryId && method === 'GET') {
+        const resp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `ITIN#${itineraryId}`, ':sk': 'META' }
+        }));
+        const item = resp.Items?.[0];
+        if (!item) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Itinerary not found' }) };
+        }
+        result = {
+          id: itineraryId,
+          title: item.title || '',
+          date: item.date || '',
+          startTime: item.startTime || '',
+          episode: item.episode || '',
+          department: item.department || '',
+          createdBy: item.createdBy || '',
+          createdAt: item.createdAt || '',
+          updatedAt: item.updatedAt || '',
+          shareToken: item.shareToken || '',
+          stops: JSON.parse(item.stops || '[]')
+        };
+
+      } else if (itineraryId && method === 'PUT') {
+        const resp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `ITIN#${itineraryId}`, ':sk': 'META' }
+        }));
+        const existing = resp.Items?.[0];
+        if (!existing) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Itinerary not found' }) };
+        }
+        const now = new Date().toISOString();
+        let shareToken = existing.shareToken || '';
+
+        if (body.generateShareToken && !shareToken) {
+          shareToken = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+          await ddb.send(new PutCommand({
+            TableName: BUDGETS_TABLE,
+            Item: { PK: `SHARE#${shareToken}`, SK: 'META', itineraryId }
+          }));
+        }
+
+        const updated = {
+          PK: `ITIN#${itineraryId}`,
+          SK: 'META',
+          title: body.title !== undefined ? body.title : existing.title,
+          date: body.date !== undefined ? body.date : existing.date,
+          startTime: body.startTime !== undefined ? body.startTime : (existing.startTime || ''),
+          episode: body.episode !== undefined ? body.episode : existing.episode,
+          department: body.department !== undefined ? body.department : existing.department,
+          createdBy: existing.createdBy || '',
+          createdAt: existing.createdAt || '',
+          updatedAt: now,
+          shareToken,
+          stops: body.stops !== undefined ? JSON.stringify(body.stops) : existing.stops
+        };
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: updated }));
+        result = {
+          id: itineraryId,
+          title: updated.title,
+          date: updated.date,
+          startTime: updated.startTime,
+          episode: updated.episode,
+          department: updated.department,
+          createdBy: updated.createdBy,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+          shareToken: updated.shareToken,
+          stops: JSON.parse(updated.stops || '[]')
+        };
+
+      } else if (itineraryId && method === 'DELETE') {
+        const resp = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `ITIN#${itineraryId}`, ':sk': 'META' }
+        }));
+        const existing = resp.Items?.[0];
+        if (existing?.shareToken) {
+          await ddb.send(new DeleteCommand({
+            TableName: BUDGETS_TABLE,
+            Key: { PK: `SHARE#${existing.shareToken}`, SK: 'META' }
+          }));
+        }
+        await ddb.send(new DeleteCommand({
+          TableName: BUDGETS_TABLE,
+          Key: { PK: `ITIN#${itineraryId}`, SK: 'META' }
+        }));
+        result = { success: true };
+      }
+    } else if (path.includes('/check-requests')) {
+      if (method === 'GET') {
+        const qs = event.queryStringParameters || {};
+        const { episode, status, location } = qs;
+        const queryParams = {
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': 'CHECKREQUESTS', ':sk': 'CR#' }
+        };
+        const filterParts = [];
+        const filterVals = {};
+        const filterNames = {};
+        if (episode) { filterVals[':ep'] = episode; filterParts.push('episode = :ep'); }
+        if (status) { filterVals[':st'] = status; filterParts.push('#st = :st'); filterNames['#st'] = 'status'; }
+        if (location) { filterVals[':loc'] = location; filterParts.push('locationName = :loc'); }
+        if (filterParts.length) {
+          queryParams.FilterExpression = filterParts.join(' AND ');
+          Object.assign(queryParams.ExpressionAttributeValues, filterVals);
+          if (Object.keys(filterNames).length) queryParams.ExpressionAttributeNames = filterNames;
+        }
+        const resp = await ddb.send(new QueryCommand(queryParams));
+        const items = (resp.Items || []).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        const summary = { total: items.length, totalAmount: 0, byStatus: {} };
+        items.forEach(cr => {
+          summary.totalAmount += cr.amount || 0;
+          summary.byStatus[cr.status] = (summary.byStatus[cr.status] || 0) + 1;
+        });
+        result = { checkRequests: items, summary };
+      } else if (method === 'POST') {
+        const { payee, amount, description, episode, locationName, category, date, budgetId, notes } = body;
+        const crId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const now = new Date().toISOString();
+        const existing = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': 'CHECKREQUESTS', ':sk': 'CR#' },
+          Select: 'COUNT'
+        }));
+        const count = (existing.Count || 0) + 1;
+        const crNumber = `CR-${String(count).padStart(4, '0')}`;
+        const item = {
+          PK: 'CHECKREQUESTS', SK: `CR#${crId}`,
+          crId, crNumber,
+          payee: payee || '', amount: Number(amount) || 0,
+          description: description || '', episode: episode || '',
+          locationName: locationName || '', category: category || '',
+          date: date || now.split('T')[0], budgetId: budgetId || '',
+          notes: notes || '', status: 'pending',
+          createdAt: now, updatedAt: now
+        };
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: item }));
+        result = { success: true, checkRequest: item };
+      } else if (method === 'PUT') {
+        const { crId, ...updates } = body;
+        const existing = await ddb.send(new QueryCommand({
+          TableName: BUDGETS_TABLE,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': 'CHECKREQUESTS', ':sk': `CR#${crId}` }
+        }));
+        if (!existing.Items?.[0]) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Check request not found' }) };
+        }
+        const merged = { ...existing.Items[0], ...updates, PK: 'CHECKREQUESTS', SK: `CR#${crId}`, updatedAt: new Date().toISOString() };
+        await ddb.send(new PutCommand({ TableName: BUDGETS_TABLE, Item: merged }));
+        result = { success: true, checkRequest: merged };
+      } else if (method === 'DELETE') {
+        const { crId } = body;
+        await ddb.send(new DeleteCommand({
+          TableName: BUDGETS_TABLE,
+          Key: { PK: 'CHECKREQUESTS', SK: `CR#${crId}` }
+        }));
         result = { success: true };
       }
     } else if (path.includes('/trigger-sync') && method === 'POST') {
