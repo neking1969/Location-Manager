@@ -2423,6 +2423,63 @@ export async function handler(event, context) {
         }));
         result = { success: true };
       }
+    } else if (path.includes('/locations/native')) {
+      const S3_KEY = 'config/native-locations.json';
+      const locId = path.split('/locations/native/')[1] || null;
+
+      if (method === 'GET') {
+        try {
+          const data = await readJsonFromS3(S3_KEY);
+          result = { locations: data.locations || [] };
+        } catch (e) {
+          result = { locations: [] };
+        }
+      } else if (method === 'POST') {
+        const existing = await readJsonFromS3(S3_KEY).catch(() => ({ locations: [] }));
+        const locations = existing.locations || [];
+        const newLoc = {
+          id: `loc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: body.name,
+          address: body.address || '',
+          city: body.city || '',
+          state: body.state || '',
+          zip: body.zip || '',
+          setName: body.setName || '',
+          contactName: body.contactName || '',
+          contactPhone: body.contactPhone || '',
+          contactEmail: body.contactEmail || '',
+          coverPhotoUrl: body.coverPhotoUrl || '',
+          status: body.status || 'active',
+          episodes: body.episodes || [],
+          notes: body.notes || '',
+          isUnbudgeted: body.isUnbudgeted === true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        locations.push(newLoc);
+        await writeJsonToS3(S3_KEY, { locations, updatedAt: new Date().toISOString() });
+        result = { success: true, location: newLoc };
+        console.log(`[Handler] Created native location: ${newLoc.name} (${newLoc.id})`);
+      } else if (method === 'PUT' && locId) {
+        const existing = await readJsonFromS3(S3_KEY).catch(() => ({ locations: [] }));
+        const locations = existing.locations || [];
+        const idx = locations.findIndex(l => l.id === locId);
+        if (idx === -1) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Location not found' }) };
+        }
+        locations[idx] = { ...locations[idx], ...body, id: locId, updatedAt: new Date().toISOString() };
+        await writeJsonToS3(S3_KEY, { locations, updatedAt: new Date().toISOString() });
+        result = { success: true, location: locations[idx] };
+        console.log(`[Handler] Updated native location: ${locations[idx].name} (${locId})`);
+      } else if (method === 'DELETE' && locId) {
+        const existing = await readJsonFromS3(S3_KEY).catch(() => ({ locations: [] }));
+        const locations = (existing.locations || []).filter(l => l.id !== locId);
+        await writeJsonToS3(S3_KEY, { locations, updatedAt: new Date().toISOString() });
+        result = { success: true, deletedId: locId };
+        console.log(`[Handler] Deleted native location: ${locId}`);
+      } else {
+        return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+      }
     } else if (path.includes('/trigger-sync') && method === 'POST') {
       console.log('[Handler] Manual sync triggered via Sync Now button');
       try {
