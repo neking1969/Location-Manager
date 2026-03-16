@@ -1,5 +1,7 @@
 # Location-Manager Project
 
+> **First thing every session:** Read `LEARNINGS.md` for past debugging discoveries and gotchas before starting work.
+
 > Cross-cutting patterns → see global ~/.claude/CLAUDE.md
 
 Budget tracking and Glide synchronization for The Shards TV production.
