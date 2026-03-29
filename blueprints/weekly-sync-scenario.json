@@ -1,0 +1,105 @@
+{
+  "name": "Dez: Location-Manager Weekly Sync",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": 2595084
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": {"x": 0, "y": 0},
+        "restore": {},
+        "expect": [
+          {"name": "syncSessionId", "type": "text", "label": "Sync Session Row ID"},
+          {"name": "ledgerFileUrl", "type": "text", "label": "Ledger File URL"},
+          {"name": "smartpoFileUrl", "type": "text", "label": "SmartPO File URL"},
+          {"name": "name", "type": "text", "label": "Session Name"}
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {},
+      "mapper": {
+        "url": "https://api.glideapp.io/api/function/mutateTables",
+        "method": "POST",
+        "headers": [
+          {"name": "Authorization", "value": "Bearer ad54fb67-06fe-40b1-a87d-565a003c3f49"},
+          {"name": "Content-Type", "value": "application/json"}
+        ],
+        "body": "{\"appID\": \"TFowqRmlJ8sMhdap17C0\", \"mutations\": [{\"kind\": \"set-columns-in-row\", \"tableName\": \"native-table-03Yk3buCk0yZOF5dzh4i\", \"rowID\": \"{{1.syncSessionId}}\", \"columnValues\": {\"8v4u7\": \"Processing\"}}]}"
+      },
+      "metadata": {
+        "designer": {"x": 300, "y": 0},
+        "restore": {}
+      }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {},
+      "mapper": {
+        "url": "https://your-lambda-endpoint.amazonaws.com/sync",
+        "method": "POST",
+        "headers": [
+          {"name": "Content-Type", "value": "application/json"}
+        ],
+        "body": "{\"syncSessionId\": \"{{1.syncSessionId}}\", \"ledgerFileUrl\": \"{{1.ledgerFileUrl}}\", \"smartpoFileUrl\": \"{{1.smartpoFileUrl}}\", \"sessionName\": \"{{1.name}}\"}"
+      },
+      "metadata": {
+        "designer": {"x": 600, "y": 0},
+        "restore": {}
+      }
+    },
+    {
+      "id": 4,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {},
+      "mapper": {
+        "url": "https://api.glideapp.io/api/function/mutateTables",
+        "method": "POST",
+        "headers": [
+          {"name": "Authorization", "value": "Bearer ad54fb67-06fe-40b1-a87d-565a003c3f49"},
+          {"name": "Content-Type", "value": "application/json"}
+        ],
+        "body": "{\"appID\": \"TFowqRmlJ8sMhdap17C0\", \"mutations\": [{\"kind\": \"set-columns-in-row\", \"tableName\": \"native-table-03Yk3buCk0yZOF5dzh4i\", \"rowID\": \"{{1.syncSessionId}}\", \"columnValues\": {\"8v4u7\": \"{{if(3.status == 200; \"Complete\"; \"Error\")}}\", \"Ys6ff\": {{3.body.recordsProcessed}}, \"60vZb\": {{3.body.errors}}, \"ESsUc\": \"{{3.body.summary}}\"}}]}"
+      },
+      "metadata": {
+        "designer": {"x": 900, "y": 0},
+        "restore": {}
+      }
+    },
+    {
+      "id": 5,
+      "module": "gateway:WebhookRespond",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "body": "{\"success\": true, \"recordsProcessed\": {{3.body.recordsProcessed}}, \"errors\": {{3.body.errors}}}",
+        "status": "200",
+        "headers": [
+          {"key": "Content-Type", "value": "application/json"}
+        ]
+      },
+      "metadata": {
+        "designer": {"x": 1200, "y": 0},
+        "restore": {}
+      }
+    }
+  ],
+  "metadata": {
+    "version": 1,
+    "scenario": {
+      "name": "Dez: Location-Manager Weekly Sync",
+      "description": "Processes weekly ledger and SmartPO file uploads from Glide Sync Sessions table",
+      "folderID": 231082
+    }
+  }
+}

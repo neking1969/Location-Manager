@@ -1,0 +1,308 @@
+{
+  "name": "Google Drive Auto-Sync to Location-Manager",
+  "description": "Watches Google Drive folder for new ledgers, POs, invoices, and check requests. Automatically syncs to Lambda and moves files to Archives.",
+  "flow": [
+    {
+      "id": 1,
+      "module": "google:TriggerFilesInstant",
+      "version": 2,
+      "parameters": {
+        "folderId": "FOLDER_ID_TO_CONFIGURE",
+        "watch": "all",
+        "limit": 10
+      },
+      "mapper": {
+        "watch": "created"
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "restore": {
+          "expect": {
+            "watch": {
+              "mode": "chose",
+              "label": "Files Created"
+            }
+          }
+        }
+      },
+      "notes": "Watches: /THE SHARDS - SEASON 1/AA_FOR BUDGET TRACKING WEBSITE/\nTriggers when new file is added to any subfolder"
+    },
+    {
+      "id": 2,
+      "module": "google:GetAFile",
+      "version": 3,
+      "parameters": {},
+      "mapper": {
+        "fileId": "{{1.id}}",
+        "convertDocument": false
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        }
+      },
+      "notes": "Downloads the file content"
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0
+        }
+      },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 4,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync",
+                "method": "post",
+                "headers": [],
+                "qs": [],
+                "bodyType": "raw",
+                "parseResponse": true,
+                "authUser": "",
+                "authPass": "",
+                "timeout": "",
+                "shareCookies": false,
+                "ca": "",
+                "rejectUnauthorized": true,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "gzip": true,
+                "useMtls": false,
+                "contentType": "application/json",
+                "data": "{\"fileUrl\": \"{{2.webContentLink}}\", \"fileName\": \"{{1.name}}\", \"filePath\": \"{{1.parents[].name}}\", \"syncSource\": \"google-drive-auto\", \"fileType\": \"LEDGER\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 900,
+                  "y": -200
+                }
+              },
+              "notes": "Sends LEDGER file to Lambda for processing"
+            }
+          ],
+          "filter": {
+            "name": "Is Ledger File",
+            "conditions": [
+              [
+                {
+                  "a": "{{1.name}}",
+                  "b": "\\d{3}\\s+6304-6342",
+                  "o": "regex"
+                }
+              ],
+              [
+                {
+                  "a": "{{1.parents[].name}}",
+                  "b": "Ledgers",
+                  "o": "text:contains"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "flow": [
+            {
+              "id": 5,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync",
+                "method": "post",
+                "headers": [],
+                "qs": [],
+                "bodyType": "raw",
+                "parseResponse": true,
+                "contentType": "application/json",
+                "data": "{\"fileUrl\": \"{{2.webContentLink}}\", \"fileName\": \"{{1.name}}\", \"filePath\": \"{{1.parents[].name}}\", \"syncSource\": \"google-drive-auto\", \"fileType\": \"SMARTPO\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 900,
+                  "y": 0
+                }
+              },
+              "notes": "Sends SMARTPO file to Lambda"
+            }
+          ],
+          "filter": {
+            "name": "Is SmartPO File",
+            "conditions": [
+              [
+                {
+                  "a": "{{1.name}}",
+                  "b": "PO-Log",
+                  "o": "text:startsWith"
+                }
+              ],
+              [
+                {
+                  "a": "{{1.parents[].name}}",
+                  "b": "POs",
+                  "o": "text:contains"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "flow": [
+            {
+              "id": 6,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync",
+                "method": "post",
+                "headers": [],
+                "qs": [],
+                "bodyType": "raw",
+                "parseResponse": true,
+                "contentType": "application/json",
+                "data": "{\"fileUrl\": \"{{2.webContentLink}}\", \"fileName\": \"{{1.name}}\", \"filePath\": \"{{1.parents[].name}}\", \"syncSource\": \"google-drive-auto\", \"fileType\": \"INVOICE\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 900,
+                  "y": 200
+                }
+              },
+              "notes": "Logs INVOICE file (not yet processed)"
+            }
+          ],
+          "filter": {
+            "name": "Is Invoice",
+            "conditions": [
+              [
+                {
+                  "a": "{{1.parents[].name}}",
+                  "b": "Invoices",
+                  "o": "text:contains"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "flow": [
+            {
+              "id": 7,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "https://6fjv2thgxf6r4x24na4y6ilgt40vstgl.lambda-url.us-west-2.on.aws/sync",
+                "method": "post",
+                "headers": [],
+                "qs": [],
+                "bodyType": "raw",
+                "parseResponse": true,
+                "contentType": "application/json",
+                "data": "{\"fileUrl\": \"{{2.webContentLink}}\", \"fileName\": \"{{1.name}}\", \"filePath\": \"{{1.parents[].name}}\", \"syncSource\": \"google-drive-auto\", \"fileType\": \"CHECK_REQUEST\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 900,
+                  "y": 400
+                }
+              },
+              "notes": "Logs CHECK_REQUEST file (not yet processed)"
+            }
+          ],
+          "filter": {
+            "name": "Is Check Request",
+            "conditions": [
+              [
+                {
+                  "a": "{{1.parents[].name}}",
+                  "b": "Check Requests",
+                  "o": "text:contains"
+                }
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "module": "google:UpdateAFile",
+      "version": 3,
+      "parameters": {},
+      "mapper": {
+        "fileId": "{{1.id}}",
+        "name": "{{1.name}}",
+        "folderId": "ARCHIVES_FOLDER_ID_TO_CONFIGURE"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1200,
+          "y": 0
+        }
+      },
+      "notes": "Moves processed file to Archives folder"
+    }
+  ],
+  "metadata": {
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us1.make.com"
+  },
+  "notes": [
+    "SETUP INSTRUCTIONS:",
+    "1. Import this blueprint into Make.com",
+    "2. Configure Google Drive connection (authorize access)",
+    "3. Set FOLDER_ID_TO_CONFIGURE to the folder ID of: /THE SHARDS - SEASON 1/AA_FOR BUDGET TRACKING WEBSITE/",
+    "4. Set ARCHIVES_FOLDER_ID_TO_CONFIGURE to the Archives subfolder ID",
+    "5. Test with a sample file",
+    "6. Activate scenario (toggle ON)",
+    "",
+    "FOLDER STRUCTURE:",
+    "AA_FOR BUDGET TRACKING WEBSITE/",
+    "├── Ledgers/          → LEDGER type",
+    "├── POs/              → SMARTPO type",
+    "├── Invoices/         → INVOICE type (logged only)",
+    "├── Check Requests/   → CHECK_REQUEST type (logged only)",
+    "└── Archives/         → Processed files moved here",
+    "",
+    "FILE TYPE DETECTION:",
+    "- LEDGER: Filename matches '\\d{3} 6304-6342' OR in Ledgers/ folder",
+    "- SMARTPO: Filename starts with 'PO-Log' OR in POs/ folder",
+    "- INVOICE: In Invoices/ folder",
+    "- CHECK_REQUEST: In Check Requests/ folder",
+    "",
+    "DEDUPLICATION:",
+    "- Lambda generates SHA256 hash of file content",
+    "- Duplicate files are automatically skipped",
+    "- Re-uploading same file won't double-process data"
+  ]
+}
